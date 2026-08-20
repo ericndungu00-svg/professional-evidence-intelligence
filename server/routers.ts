@@ -321,6 +321,18 @@ export const appRouter = router({
       if (requirements.length) await db.insert(targetRequirements).values(requirements.map(item => ({ userId: ctx.user.id, targetDocumentId: documentId, category: item.category, criterion: item.criterion, sourceLocation: locationForParagraph(item.paragraphIndex, paragraphs), ordinal: item.ordinal })));
       return { documentId, criteriaCount: requirements.length, message: "Pasted target specification stored and prepared for analysis." };
     }),
+    pasteEvidence: protectedProcedure.input(z.object({
+      title: z.string().min(1).max(255), sourceKind: z.string().min(1).max(80), text: z.string().min(40).max(70_000),
+    })).mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "The evidence library is temporarily unavailable." });
+      const profile = (await getWorkspace(ctx.user.id)).profile;
+      const documentId = await persistDocument({ userId: ctx.user.id, profileId: profile?.id ?? null, title: input.title, fileName: "pasted-evidence.txt", mimeType: "text/plain", documentType: "evidence", sourceKind: input.sourceKind, extractedText: input.text.trim() });
+      const paragraphs = paragraphize(input.text);
+      const items = await extractEvidenceItems(input.text);
+      if (items.length) await db.insert(extractedEvidence).values(items.map(item => ({ userId: ctx.user.id, documentId, statement: item.statement, excerpt: item.excerpt, sourceLocation: locationForParagraph(item.paragraphIndex, paragraphs), category: item.category, evidenceType: item.evidenceType, outcome: item.outcome, confidence: item.confidence })));
+      return { documentId, itemCount: items.length, message: "Pasted evidence stored and prepared for analysis." };
+    }),
     upload: protectedProcedure.input(z.object({
       title: z.string().min(1).max(255), fileName: z.string().min(1).max(255), mimeType: z.string().min(1).max(150), documentType: z.enum(["evidence", "target", "current_role"]), sourceKind: z.string().min(1).max(80), dataBase64: z.string().min(1).max(15_000_000), sourceText: z.string().max(70_000).optional(),
     })).mutation(async ({ ctx, input }) => {
