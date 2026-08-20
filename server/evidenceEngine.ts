@@ -14,8 +14,8 @@ export type ExtractedItemDraft = {
 export type RequirementDraft = { category: string; criterion: string; paragraphIndex: number; ordinal: number };
 
 const MAX_TEXT_CHARS = 60000;
-const MODEL = "gemini-2.5-flash";
-const APPRAISAL_MODEL = "gemini-2.5-flash";
+const MODEL = "gemini-3.6-flash";
+const APPRAISAL_MODEL = "gemini-3.6-flash";
 
 function normalizedText(value: string) {
   return value.replace(/\r/g, "").replace(/\n{3,}/g, "\n\n").trim();

@@ -3,6 +3,7 @@ import {
   FinishReason,
   FunctionCallingConfigMode,
   GoogleGenAI,
+  ThinkingLevel,
   type Content,
   type FunctionDeclaration,
   type GenerateContentConfig,
@@ -218,7 +219,7 @@ const normalizeResponseFormat = ({
 // Gemini has no server-side default model; callers in this codebase always
 // pass one, but this keeps invokeLLM from throwing an unhelpful error if one
 // is ever omitted.
-const DEFAULT_MODEL = "gemini-2.5-flash";
+const DEFAULT_MODEL = "gemini-3.6-flash";
 const DEFAULT_MAX_TOKENS = 8192;
 const EFFORT_LEVELS = new Set(["low", "medium", "high", "xhigh", "max"]);
 
@@ -321,17 +322,20 @@ const toGeminiToolConfig = (
 };
 
 // The `reasoning: { effort }` shape mirrors OpenAI's reasoning-effort models;
-// Gemini's closest equivalent is a thinking budget. There's no direct
-// analogue for every effort level, so only "low" (the only value this
-// codebase actually sends) is translated, to disabled thinking — the
-// fastest/cheapest option, matching the intent of a low-effort request.
-// An explicit `thinking` block (already Gemini-shaped) is passed through as-is.
+// Gemini's closest equivalent is thinkingLevel. Verified directly against the
+// live API: the older numeric thinkingBudget (e.g. thinkingBudget: 0 to
+// disable thinking) is REJECTED with a 400 INVALID_ARGUMENT on gemini-3.6-flash
+// — this model generation only accepts the newer thinkingLevel enum
+// (MINIMAL/LOW/MEDIUM/HIGH). There's no direct analogue for every effort
+// level, so only "low" (the only value this codebase actually sends) is
+// translated, to the lowest available level. An explicit `thinking` block
+// (already Gemini-shaped) is passed through as-is.
 const toThinkingConfig = (
   thinking: Record<string, unknown> | undefined,
   reasoning: Record<string, unknown> | undefined
 ): ThinkingConfig | undefined => {
   if (thinking) return thinking as unknown as ThinkingConfig;
-  if (reasoning?.effort === "low") return { thinkingBudget: 0 };
+  if (reasoning?.effort === "low") return { thinkingLevel: ThinkingLevel.MINIMAL };
   return undefined;
 };
 
