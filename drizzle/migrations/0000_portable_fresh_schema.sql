@@ -11,7 +11,7 @@ CREATE TABLE `criterionAssessments` (
 	`createdAt` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `criterionAssessments_id` PRIMARY KEY(`id`)
 );
-
+--> statement-breakpoint
 CREATE TABLE `evidenceAnalyses` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`userId` int NOT NULL,
@@ -25,7 +25,7 @@ CREATE TABLE `evidenceAnalyses` (
 	`createdAt` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `evidenceAnalyses_id` PRIMARY KEY(`id`)
 );
-
+--> statement-breakpoint
 CREATE TABLE `evidenceContradictions` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`analysisId` int NOT NULL,
@@ -37,7 +37,7 @@ CREATE TABLE `evidenceContradictions` (
 	`createdAt` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `evidenceContradictions_id` PRIMARY KEY(`id`)
 );
-
+--> statement-breakpoint
 CREATE TABLE `evidenceDocuments` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`userId` int NOT NULL,
@@ -55,7 +55,7 @@ CREATE TABLE `evidenceDocuments` (
 	`createdAt` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `evidenceDocuments_id` PRIMARY KEY(`id`)
 );
-
+--> statement-breakpoint
 CREATE TABLE `evidenceProfiles` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`userId` int NOT NULL,
@@ -73,7 +73,7 @@ CREATE TABLE `evidenceProfiles` (
 	CONSTRAINT `evidenceProfiles_id` PRIMARY KEY(`id`),
 	CONSTRAINT `evidence_profiles_user_unique` UNIQUE(`userId`)
 );
-
+--> statement-breakpoint
 CREATE TABLE `extractedEvidence` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`userId` int NOT NULL,
@@ -89,7 +89,15 @@ CREATE TABLE `extractedEvidence` (
 	`createdAt` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `extractedEvidence_id` PRIMARY KEY(`id`)
 );
-
+--> statement-breakpoint
+CREATE TABLE `sessions` (
+	`id` varchar(64) NOT NULL,
+	`userId` int NOT NULL,
+	`expiresAt` timestamp NOT NULL,
+	`createdAt` timestamp NOT NULL DEFAULT (now()),
+	CONSTRAINT `sessions_id` PRIMARY KEY(`id`)
+);
+--> statement-breakpoint
 CREATE TABLE `targetRequirements` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`userId` int NOT NULL,
@@ -101,31 +109,31 @@ CREATE TABLE `targetRequirements` (
 	`createdAt` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `targetRequirements_id` PRIMARY KEY(`id`)
 );
-
+--> statement-breakpoint
 CREATE TABLE `users` (
 	`id` int AUTO_INCREMENT NOT NULL,
-	`openId` varchar(64) NOT NULL,
+	`email` varchar(320) NOT NULL,
+	`passwordHash` varchar(255) NOT NULL,
 	`name` text,
-	`email` varchar(320),
-	`loginMethod` varchar(64),
 	`role` enum('user','admin') NOT NULL DEFAULT 'user',
 	`createdAt` timestamp NOT NULL DEFAULT (now()),
 	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	`lastSignedIn` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `users_id` PRIMARY KEY(`id`),
-	CONSTRAINT `users_openId_unique` UNIQUE(`openId`)
+	CONSTRAINT `users_email_unique` UNIQUE(`email`)
 );
-
-ALTER TABLE `criterionAssessments` ADD CONSTRAINT `criterionAssessments_analysisId_evidenceAnalyses_id_fk` FOREIGN KEY (`analysisId`) REFERENCES `evidenceAnalyses`(`id`) ON DELETE no action ON UPDATE no action;
-ALTER TABLE `criterionAssessments` ADD CONSTRAINT `criterionAssessments_requirementId_targetRequirements_id_fk` FOREIGN KEY (`requirementId`) REFERENCES `targetRequirements`(`id`) ON DELETE no action ON UPDATE no action;
-ALTER TABLE `evidenceAnalyses` ADD CONSTRAINT `evidenceAnalyses_userId_users_id_fk` FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON DELETE no action ON UPDATE no action;
-ALTER TABLE `evidenceAnalyses` ADD CONSTRAINT `evidenceAnalyses_profileId_evidenceProfiles_id_fk` FOREIGN KEY (`profileId`) REFERENCES `evidenceProfiles`(`id`) ON DELETE no action ON UPDATE no action;
-ALTER TABLE `evidenceAnalyses` ADD CONSTRAINT `evidenceAnalyses_targetDocumentId_evidenceDocuments_id_fk` FOREIGN KEY (`targetDocumentId`) REFERENCES `evidenceDocuments`(`id`) ON DELETE no action ON UPDATE no action;
-ALTER TABLE `evidenceContradictions` ADD CONSTRAINT `evidenceContradictions_analysisId_evidenceAnalyses_id_fk` FOREIGN KEY (`analysisId`) REFERENCES `evidenceAnalyses`(`id`) ON DELETE no action ON UPDATE no action;
-ALTER TABLE `evidenceDocuments` ADD CONSTRAINT `evidenceDocuments_userId_users_id_fk` FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON DELETE no action ON UPDATE no action;
-ALTER TABLE `evidenceDocuments` ADD CONSTRAINT `evidenceDocuments_profileId_evidenceProfiles_id_fk` FOREIGN KEY (`profileId`) REFERENCES `evidenceProfiles`(`id`) ON DELETE no action ON UPDATE no action;
-ALTER TABLE `evidenceProfiles` ADD CONSTRAINT `evidenceProfiles_userId_users_id_fk` FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON DELETE no action ON UPDATE no action;
-ALTER TABLE `extractedEvidence` ADD CONSTRAINT `extractedEvidence_userId_users_id_fk` FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON DELETE no action ON UPDATE no action;
-ALTER TABLE `extractedEvidence` ADD CONSTRAINT `extractedEvidence_documentId_evidenceDocuments_id_fk` FOREIGN KEY (`documentId`) REFERENCES `evidenceDocuments`(`id`) ON DELETE no action ON UPDATE no action;
-ALTER TABLE `targetRequirements` ADD CONSTRAINT `targetRequirements_userId_users_id_fk` FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON DELETE no action ON UPDATE no action;
+--> statement-breakpoint
+ALTER TABLE `criterionAssessments` ADD CONSTRAINT `criterionAssessments_analysisId_evidenceAnalyses_id_fk` FOREIGN KEY (`analysisId`) REFERENCES `evidenceAnalyses`(`id`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `criterionAssessments` ADD CONSTRAINT `criterionAssessments_requirementId_targetRequirements_id_fk` FOREIGN KEY (`requirementId`) REFERENCES `targetRequirements`(`id`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `evidenceAnalyses` ADD CONSTRAINT `evidenceAnalyses_userId_users_id_fk` FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `evidenceAnalyses` ADD CONSTRAINT `evidenceAnalyses_profileId_evidenceProfiles_id_fk` FOREIGN KEY (`profileId`) REFERENCES `evidenceProfiles`(`id`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `evidenceAnalyses` ADD CONSTRAINT `evidenceAnalyses_targetDocumentId_evidenceDocuments_id_fk` FOREIGN KEY (`targetDocumentId`) REFERENCES `evidenceDocuments`(`id`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `evidenceContradictions` ADD CONSTRAINT `evidenceContradictions_analysisId_evidenceAnalyses_id_fk` FOREIGN KEY (`analysisId`) REFERENCES `evidenceAnalyses`(`id`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `evidenceDocuments` ADD CONSTRAINT `evidenceDocuments_userId_users_id_fk` FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `evidenceDocuments` ADD CONSTRAINT `evidenceDocuments_profileId_evidenceProfiles_id_fk` FOREIGN KEY (`profileId`) REFERENCES `evidenceProfiles`(`id`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `evidenceProfiles` ADD CONSTRAINT `evidenceProfiles_userId_users_id_fk` FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `extractedEvidence` ADD CONSTRAINT `extractedEvidence_userId_users_id_fk` FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `extractedEvidence` ADD CONSTRAINT `extractedEvidence_documentId_evidenceDocuments_id_fk` FOREIGN KEY (`documentId`) REFERENCES `evidenceDocuments`(`id`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `sessions` ADD CONSTRAINT `sessions_userId_users_id_fk` FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `targetRequirements` ADD CONSTRAINT `targetRequirements_userId_users_id_fk` FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE `targetRequirements` ADD CONSTRAINT `targetRequirements_targetDocumentId_evidenceDocuments_id_fk` FOREIGN KEY (`targetDocumentId`) REFERENCES `evidenceDocuments`(`id`) ON DELETE no action ON UPDATE no action;

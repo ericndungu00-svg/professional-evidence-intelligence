@@ -36,6 +36,13 @@
       "when": 1787190993021,
       "tag": "0004_damp_silver_fox",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1787239289990,
+      "tag": "0005_portable_fresh_schema",
+      "breakpoints": true
     }
   ]
 }
