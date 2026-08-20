@@ -1,0 +1,1 @@
+ALTER TABLE `criterionAssessments` MODIFY COLUMN `assessment` enum('directly_evidenced','indirectly_relevantly_evidenced','inferred','not_found','contradicted','demonstrated','partial','unsupported') NOT NULL;

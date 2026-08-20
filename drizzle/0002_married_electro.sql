@@ -1,0 +1,1 @@
+ALTER TABLE `evidenceAnalyses` ADD `objectiveReport` json;

@@ -1,0 +1,1 @@
+ALTER TABLE `evidenceDocuments` MODIFY COLUMN `documentType` enum('evidence','target','current_role') NOT NULL;

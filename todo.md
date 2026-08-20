@@ -1,0 +1,78 @@
+# Project TODO
+
+- [x] Define a source-grounded evidence domain model for profiles, documents, requirements, evidence items, assessments, contradictions, and next steps.
+- [x] Create database tables and persistence helpers for per-user evidence libraries and analysis records.
+- [x] Add secure document upload and text ingestion for TXT, PDF, and DOCX evidence files, with original-file storage outside the database.
+- [x] Build target specification upload and pasted-text entry, with individual requirement extraction.
+- [x] Implement server-side structured evidence extraction with document and page/section lineage.
+- [x] Implement source-grounded evidence-to-requirement mapping with demonstrated, partial, and not-found assessments.
+- [x] Implement explicit unsupported-claim, conflict, participation-versus-ownership, and outcome-attribution safeguards.
+- [x] Create Objective A promotion mapping, Objective B appraisal summary, and Objective C job-evaluation discussion outputs using exactly those labels.
+- [x] Generate evidence-grounded next-step recommendations without invented evidence, citations, or source locations.
+- [x] Build a calm, professional dashboard UI with persistent trust-and-safety disclaimer and evidence-inspection drawers.
+- [x] Add fictional Sarah Mwangi demonstration data and a fictional Band 7 Specialist Nurse specification, labelled throughout as demonstration data.
+- [x] Add automated adversarial tests for inflated leadership, informal leadership, participation, outcome attribution, missing evidence, and conflicting documents.
+- [x] Run type-checks, unit tests, and visual checks; fix discovered issues.
+- [x] Add a paste-only target-specification route that stores its source text and extracts individual criteria without requiring a file.
+- [x] Enrich stored source lineage with available section context as well as paragraph reference.
+- [x] Verify the always-visible trust and safety disclaimer and full adversarial test suite in the completed UI.
+- [x] Prepare implementation notes, known limitations, and delivery guidance.
+- [x] Enable a non-persistent guest workflow for Evidence Map and Objective A analysis without sign-in.
+- [x] Keep account requirements limited to saving documents, profiles, libraries, and analysis history; update all relevant copy.
+- [x] Test the guest-analysis flow and access boundary, then document the revised behaviour.
+- [x] Make “Start my own evidence review” the dominant first-load action before any analysis has been run.
+- [x] Visually subordinate first-load navigation, progress, objective selection, and the default demonstration without changing their downstream behaviour.
+- [x] Verify the focused entry screen on desktop and mobile without modifying the evidence engine or analysis outputs.
+- [x] Define source-consistent contracts for the Objective A promotion map, Objective B appraisal report, and Objective C job-evaluation preparation report.
+- [x] Preserve the shared evidence corpus, extraction, source lineage, evidence strength, and contradiction safeguards across all objective lenses.
+- [x] Implement Objective B outputs for achievements, impact, limitations, development themes, objectives, and retained evidence.
+- [x] Implement Objective C outputs for formal responsibilities, actual activities, alignment or divergence, discussion points, and strengthening evidence without banding conclusions.
+- [x] Render distinct Objective A, B, and C reports from the same corpus and retain source-inspection links.
+- [x] Add regression tests proving identical evidence produces materially different but evidence-consistent outputs under Objectives A, B, and C.
+- [x] Validate the objective refactor and document the changed architecture.
+- [x] Preserve the shared Evidence Map and Objective A contract unchanged during the Objective B and C correction.
+- [x] Refine Objective B to distinguish documented achievements, documented impact, and evidence limitations for the same contribution.
+- [x] Add a formal current-role responsibility source distinct from the target-role specification for Objective C comparison.
+- [x] Redesign Objective C around aligned, potentially broader, potentially narrower, insufficient, and unclear/ambiguous responsibility comparisons.
+- [x] Add neutral Objective C discussion questions and explicit evidence-needed recommendations without any banding or entitlement conclusion.
+- [x] Add regression tests for Sarah’s QI contribution, project outcome limitation, and neutral current-role comparison outcomes.
+- [x] Validate the refined reports and document the current-role comparison architecture.
+- [x] Correct the Objective C summary so it counts the new neutral current-role comparison states accurately.
+- [x] Decompose multi-part target requirements into source-checkable substantive components for Evidence Map assessment.
+- [x] Distinguish directly evidenced, indirectly/relevantly evidenced, inferred, not found, and contradicted at component and requirement level.
+- [x] Prevent general leadership evidence from standing in for senior support, role modelling, formal policy development, or policy leadership without explicit source support.
+- [x] Preserve population scope so evidence for patients, staff, carers, and external agencies is assessed separately rather than aggregated.
+- [x] Prioritise explicit CV qualifications, certifications, and Education/CPD entries when assessing CPD requirements.
+- [x] Render component-level source-linked evidence qualifications in the shared Evidence Map without changing objective outputs.
+- [x] Add regression tests for leadership scope, policy scope, population coverage, and explicit CPD evidence priority.
+- [x] Validate and document the defensible evidence-assessment refinement.
+- [x] Verify and retain implementation notes for component-level Evidence Map classifications, population scope, and CPD priority.
+- [x] Diagnose the read-only Objective B retrieval, filtering, generation, and persistence path for the user’s current evidence library; do not alter application logic or data.
+- [x] Validate Objective B AI responses for string content, valid JSON, the six expected appraisal arrays, and at least one source-linked finding before marking analysis complete.
+- [x] Persist Objective B generation failures as failed analyses with an actionable message, never as empty complete reports.
+- [x] Surface Objective B generation failures clearly in the interface without modifying extraction or Objective A/C logic.
+- [x] Add regression tests for API failure, non-string content, malformed JSON, invalid schema, and valid source-linked appraisal output.
+- [ ] Rerun Objective B against the user’s saved library when authenticated production access is available and report the generated appraisal output.
+- [x] Complete autonomous controlled validation of Objective B’s successful and visible-failure paths while retaining the secure authenticated-user rerun as the final private-data step.
+- [x] Exercise a controlled failing Objective B run end-to-end and verify it is persisted as failed with no report payload.
+- [ ] Verify the persistent user-facing Objective B failure message in the running interface.
+- [ ] Verify the Objective B failed-state persistence and persistent failure alert in a live authenticated production session.
+- [x] Validate the overnight iteration brief against Objective B, evidence discipline, CPD retrieval, source traceability, contradiction handling, and unchanged Objective C behaviour using automated and controlled full-library evidence; the private saved-library rerun remains separately access-bound.
+- [x] Run documented cross-objective regressions for the Sarah demonstration and available non-private controlled test evidence; record any inability to access the private saved library.
+- [x] Complete a documented live A/B/C controlled-runtime regression or record the final runtime limitation alongside the automated cross-objective coverage.
+- [x] Tighten component post-processing so informal advice or general leadership is not directly evidenced as senior support, role modelling, or formal policy leadership without explicit source language.
+- [x] Produce a concise verified engineering report covering fixed items, changes, tests, remaining issues, and the recommended next test.
+- [x] Diagnose why the Objective B full-CV request receives HTML rather than the expected JSON response; the browser transport error was separately guarded, while the controlled large-library failure was a model response-contract breach.
+- [x] Add resilient response-boundary handling so HTML error pages cannot surface as raw JSON parsing errors.
+- [x] Verify the repaired Objective B full-CV request path with a production-sized, source-linked controlled library without changing extraction or Objective A/C logic.
+- [x] Accept valid Objective B JSON enclosed in common model response fences while continuing to reject genuinely malformed appraisal output.
+- [x] Reduce Objective B’s full-library prompt to a bounded representative, source-linked evidence set so large CV analyses complete reliably without treating unselected sources as absent.
+- [x] Add an Objective B-only structured-output fallback for a full-library model response that remains non-JSON after bounded request handling; preserve the initial explicit diagnostic if that retry also fails.
+- [x] Check the available authenticated browser and owner-scoped database context for the saved-library rerun without accessing any other user’s evidence; no non-demo library was available in this environment.
+- [x] Diagnose the live Objective B 524 gateway timeout shown after running the saved library; the synchronous remote appraisal request could exceed the gateway window, while the reported HTML was the gateway response rather than an application JSON parsing defect.
+- [x] Replace Objective B’s incompatible JSON-mode primary request with a provider-compatible bounded structured appraisal request while retaining the source-only timeout safety net.
+- [x] Prove that the provider-compatible primary Objective B request returns a schema-valid populated report within the gateway-safe deadline for a controlled large library.
+- [ ] Add regression coverage for Objective B timeout-safe request sizing, primary success, and fallback behaviour; then validate the deployed production path.
+- [x] Export the complete portable project source, including frontend, backend, current schema, fresh-schema SQL DDL, configuration, and non-secret environment-variable names; historical generated migration SQL was not present in the project.
+- [x] Check GitHub export availability; no authenticated GitHub integration is enabled in this session, so provide a verified downloadable ZIP and handover guidance instead.
+- [ ] Deliver the verified source ZIP and checksum to the user.
