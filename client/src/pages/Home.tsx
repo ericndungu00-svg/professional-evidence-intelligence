@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { startLogin } from "@/const";
 import { trpc } from "@/lib/trpc";
 import { AlertTriangle, ArrowRight, BookOpenText, CheckCircle2, ChevronRight, CircleAlert, FileText, FolderOpen, Landmark, Loader2, LockKeyhole, Plus, Scale, SearchCheck, ShieldCheck, Sparkles, Target, Upload, X } from "lucide-react";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 type Objective = "A" | "B" | "C";
@@ -57,6 +57,8 @@ export default function Home() {
   const [guestWorkspace, setGuestWorkspace] = useState<any>(null);
   const [entryDismissed, setEntryDismissed] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [analysisId, setAnalysisId] = useState<number | null>(null);
+  const [guestJobId, setGuestJobId] = useState<string | null>(null);
   const [profileDraft, setProfileDraft] = useState({ currentRole: "", profession: "", specialty: "", experience: "", currentLevel: "", targetRole: "", careerObjective: "", ownClaims: "" });
   const [uploadDraft, setUploadDraft] = useState({ title: "", documentType: "evidence" as "evidence" | "target" | "current_role", sourceKind: "CV", sourceText: "" });
   const [uploadFile, setUploadFile] = useState<File | null>(null);
@@ -85,14 +87,59 @@ export default function Home() {
     onSuccess: data => { utils.evidence.workspace.invalidate(); toast.success(data.message); },
     onError: error => toast.error(error.message),
   });
+  // The analysis endpoints kick off a background job and return immediately
+  // (rather than blocking the request on the full LLM pipeline, which can
+  // exceed platform/proxy timeouts on longer submissions) — these mutations
+  // just start the job; the queries below poll for completion.
   const runAnalysis = trpc.evidence.runAnalysis.useMutation({
-    onSuccess: data => { setAnalysisError(null); utils.evidence.workspace.invalidate(); setActiveSection(data.objectiveReport?.objective === "A" ? "evidence-map" : "objective-summary"); toast.success(data.summary); },
+    onSuccess: data => { setAnalysisError(null); setAnalysisId(data.analysisId); },
     onError: error => { setAnalysisError(error.message); toast.error(error.message); },
   });
-  const guestAnalysis = trpc.guest.analyse.useMutation({
-    onSuccess: data => { setGuestWorkspace(data); setObjective("A"); setActiveSection("evidence-map"); setGuestOpen(false); toast.success("Guest Evidence Map generated. It will not be saved to a library."); },
+  const analysisStatusQuery = trpc.evidence.analysisStatus.useQuery(
+    { analysisId: analysisId ?? 0 },
+    { enabled: analysisId !== null, refetchInterval: query => (query.state.data?.status === "processing" ? 1500 : false) }
+  );
+  useEffect(() => {
+    const data = analysisStatusQuery.data;
+    if (!data || data.status === "processing") return;
+    if (data.status === "complete") {
+      utils.evidence.workspace.invalidate();
+      setActiveSection(data.objectiveReport?.objective === "A" ? "evidence-map" : "objective-summary");
+      toast.success(data.summary ?? "Analysis complete.");
+    } else {
+      const message = data.summary ?? "Analysis failed.";
+      setAnalysisError(message);
+      toast.error(message);
+    }
+    setAnalysisId(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [analysisStatusQuery.data]);
+
+  const guestAnalysis = trpc.guest.startAnalyse.useMutation({
+    onSuccess: data => setGuestJobId(data.jobId),
     onError: error => toast.error(error.message),
   });
+  const guestAnalysisStatusQuery = trpc.guest.analyseStatus.useQuery(
+    { jobId: guestJobId ?? "" },
+    { enabled: guestJobId !== null, refetchInterval: query => (query.state.data?.status === "processing" ? 1500 : false) }
+  );
+  useEffect(() => {
+    const job = guestAnalysisStatusQuery.data;
+    if (!job || job.status === "processing") return;
+    if (job.status === "complete") {
+      setGuestWorkspace(job.result);
+      setObjective("A");
+      setActiveSection("evidence-map");
+      setGuestOpen(false);
+      toast.success("Guest Evidence Map generated. It will not be saved to a library.");
+    } else {
+      toast.error(job.error ?? "Guest analysis failed.");
+    }
+    setGuestJobId(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [guestAnalysisStatusQuery.data]);
+  const isAnalysing = runAnalysis.isPending || analysisId !== null;
+  const isGuestAnalysing = guestAnalysis.isPending || guestJobId !== null;
 
   const ensureAuth = () => { if (!isAuthenticated) { toast.message("Sign in to save evidence to your private library."); startLogin(); return false; } return true; };
 
@@ -141,7 +188,7 @@ export default function Home() {
           <aside className="xl:sticky xl:top-24 xl:h-fit"><nav className="rounded-xl border bg-card p-2 shadow-sm"><NavButton active={activeSection === "evidence-map"} icon={SearchCheck} label="Evidence map" onClick={() => setActiveSection("evidence-map")} /><NavButton active={activeSection === "library"} icon={FolderOpen} label="Evidence library" onClick={() => setActiveSection("library")} /><NavButton active={activeSection === "objective-summary"} icon={BookOpenText} label="Objective output" onClick={() => setActiveSection("objective-summary")} /><NavButton active={activeSection === "safety"} icon={ShieldCheck} label="Method & safeguards" onClick={() => setActiveSection("safety")} /></nav><div className="mt-4 rounded-xl border border-dashed bg-card p-4"><p className="font-mono text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">Current objective</p><p className="mt-1 font-serif text-lg font-semibold">{objectives[objective].label}</p><p className="mt-1 text-xs leading-5 text-muted-foreground">{objectives[objective].title}</p></div></aside>
 
           <div className="min-w-0">
-            <section className="rise rounded-xl border bg-card p-5 shadow-sm lg:p-6"><div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"><div><p className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-primary">Choose an analysis lens</p><h2 className="mt-1 font-serif text-2xl font-semibold">What would you like the supplied evidence to answer?</h2><p className="mt-1 text-xs text-muted-foreground">Evidence Map and Objective A work in a one-session guest mode. Sign in only to save a library or analysis history.</p></div><Button onClick={() => { setAnalysisError(null); if (isAuthenticated) runAnalysis.mutate({ objective }); else setGuestOpen(true); }} disabled={isAuthenticated && runAnalysis.isPending} className="shrink-0">{(isAuthenticated && runAnalysis.isPending) ? <Loader2 className="animate-spin" /> : <Sparkles />}{isAuthenticated ? "Analyse my library" : "Analyse without signing in"}</Button></div><div className="mt-5 grid gap-3 lg:grid-cols-3">{(Object.keys(objectives) as Objective[]).map(key => { const item = objectives[key]; const Icon = item.icon; return <button key={key} onClick={() => chooseObjective(key)} className={`rounded-lg border p-4 text-left transition-all duration-150 hover:-translate-y-0.5 hover:shadow-sm ${objective === key ? "border-primary bg-primary/[.035] ring-1 ring-primary/20" : "bg-card hover:border-primary/40"}`}><div className="flex items-center justify-between"><span className="grid size-8 place-items-center rounded-md bg-secondary text-secondary-foreground"><Icon className="size-4" /></span><span className="font-mono text-[10px] font-bold uppercase tracking-[.14em] text-muted-foreground">{item.label}</span></div><p className="mt-4 font-semibold">{item.title}</p><p className="mt-1 text-xs leading-5 text-muted-foreground">{item.description}</p></button>; })}</div></section>
+            <section className="rise rounded-xl border bg-card p-5 shadow-sm lg:p-6"><div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"><div><p className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-primary">Choose an analysis lens</p><h2 className="mt-1 font-serif text-2xl font-semibold">What would you like the supplied evidence to answer?</h2><p className="mt-1 text-xs text-muted-foreground">Evidence Map and Objective A work in a one-session guest mode. Sign in only to save a library or analysis history.</p></div><Button onClick={() => { setAnalysisError(null); if (isAuthenticated) runAnalysis.mutate({ objective }); else setGuestOpen(true); }} disabled={isAuthenticated && isAnalysing} className="shrink-0">{(isAuthenticated && isAnalysing) ? <Loader2 className="animate-spin" /> : <Sparkles />}{isAuthenticated ? "Analyse my library" : "Analyse without signing in"}</Button></div><div className="mt-5 grid gap-3 lg:grid-cols-3">{(Object.keys(objectives) as Objective[]).map(key => { const item = objectives[key]; const Icon = item.icon; return <button key={key} onClick={() => chooseObjective(key)} className={`rounded-lg border p-4 text-left transition-all duration-150 hover:-translate-y-0.5 hover:shadow-sm ${objective === key ? "border-primary bg-primary/[.035] ring-1 ring-primary/20" : "bg-card hover:border-primary/40"}`}><div className="flex items-center justify-between"><span className="grid size-8 place-items-center rounded-md bg-secondary text-secondary-foreground"><Icon className="size-4" /></span><span className="font-mono text-[10px] font-bold uppercase tracking-[.14em] text-muted-foreground">{item.label}</span></div><p className="mt-4 font-semibold">{item.title}</p><p className="mt-1 text-xs leading-5 text-muted-foreground">{item.description}</p></button>; })}</div></section>
 
             {analysisError && <AnalysisFailureAlert message={analysisError} />}
 
@@ -155,7 +202,7 @@ export default function Home() {
 
       <div className="fixed inset-x-0 bottom-0 z-40 border-t border-primary/20 bg-primary px-4 py-2 text-center text-[11px] leading-4 text-primary-foreground shadow-lg">This tool provides decision support from supplied evidence only. It does not determine NHS AfC banding, employment eligibility, legal rights, job-evaluation outcomes, or professional competence.</div>
       {selectedSource?.evidence && <SourcePanel evidence={selectedSource.evidence} document={selectedSource.document} onClose={() => setSelectedEvidenceId(null)} />}
-      <GuestAnalysisDialog open={guestOpen} onOpenChange={setGuestOpen} onSubmit={data => guestAnalysis.mutate(data)} pending={guestAnalysis.isPending} />
+      <GuestAnalysisDialog open={guestOpen} onOpenChange={setGuestOpen} onSubmit={data => guestAnalysis.mutate(data)} pending={isGuestAnalysing} />
     </div>
   );
 }

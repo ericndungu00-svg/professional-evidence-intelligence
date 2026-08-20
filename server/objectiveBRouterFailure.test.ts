@@ -50,8 +50,12 @@ describe("Objective B failed-analysis persistence", () => {
 
   it("marks a malformed generation as failed and never saves an empty completed report", async () => {
     const caller = appRouter.createCaller(context());
-    await expect(caller.evidence.runAnalysis({ objective: "B" })).rejects.toMatchObject({ code: "BAD_GATEWAY" });
-    expect(state.updates).toHaveLength(1);
+    // runAnalysis now returns immediately with a "processing" status and runs
+    // the generation in the background (see routers.ts runAnalysisJob), so
+    // the failure is observed by waiting for the persisted status update
+    // rather than by the mutation call rejecting.
+    await expect(caller.evidence.runAnalysis({ objective: "B" })).resolves.toMatchObject({ analysisId: 77, status: "processing" });
+    await vi.waitFor(() => expect(state.updates).toHaveLength(1));
     expect(state.updates[0]).toMatchObject({ status: "failed", objectiveReport: null });
     expect(state.updates[0]?.generatedSummary).toContain("malformed json");
   });

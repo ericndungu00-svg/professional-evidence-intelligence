@@ -1,4 +1,5 @@
 import { TRPCError } from "@trpc/server";
+import { randomUUID } from "crypto";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import {
@@ -12,7 +13,7 @@ import {
 } from "../drizzle/schema";
 import { getDb, getTargetDocument, getWorkspace } from "./db";
 import { DEMO_LABEL, demoAssessments, demoContradictions, demoCurrentRole, demoCurrentRoleResponsibilities, demoDocuments, demoEvidence, demoObjectiveReports, demoProfile, demoRequirements, demoTarget } from "./demoData";
-import { analyseAnnualAppraisal, analyseJobEvaluation, AppraisalGenerationError, detectPlainTextConflicts, extractEvidenceItems, extractRequirements, locationForParagraph, mapEvidenceToRequirements, paragraphize, parseEvidenceFile } from "./evidenceEngine";
+import { analyseAnnualAppraisal, analyseJobEvaluation, AppraisalGenerationError, detectPlainTextConflicts, extractEvidenceItems, extractRequirements, locationForParagraph, mapEvidenceToRequirements, MappingDraft, paragraphize, parseEvidenceFile } from "./evidenceEngine";
 import { storagePut } from "./storage";
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
@@ -83,6 +84,151 @@ async function persistDocument(args: {
   return asId(result);
 }
 
+type GuestAnalysisResult = {
+  isGuest: true;
+  label: string;
+  disclaimer: string;
+  summary: string;
+  profile: { id: string; currentRole: string; profession: string; targetRole: string; ownClaims: string | null };
+  documents: { id: string; title: string; fileName: string; sourceKind: string; documentType: string; extractedText: string; extractionStatus: string; isDemo: string }[];
+  targetDocument: { id: string; title: string; fileName: string; sourceKind: string; documentType: string; extractedText: string; extractionStatus: string; isDemo: string };
+  requirements: { id: number; category: string; criterion: string; sourceLocation: string }[];
+  evidence: { id: number; documentId: string; statement: string; excerpt: string; sourceLocation: string; category: string; evidenceType: string; confidence: string }[];
+  assessments: MappingDraft[];
+  contradictions: { id: number; type: string; severity: "review" | "unsupported"; claim: string; explanation: string; evidenceIds: number[] }[];
+};
+
+type GuestAnalysisJob =
+  | { status: "processing" }
+  | { status: "complete"; result: GuestAnalysisResult }
+  | { status: "failed"; error: string };
+
+// Guest analyses are explicitly ephemeral (never persisted to the database),
+// so an in-memory job store matches their lifetime — this assumes a single
+// long-lived server process; a multi-instance deployment would need a shared
+// store (Redis, or a DB table) instead.
+const guestJobs = new Map<string, GuestAnalysisJob>();
+const GUEST_JOB_TTL_MS = 15 * 60 * 1000;
+
+function scheduleGuestJobCleanup(jobId: string) {
+  setTimeout(() => guestJobs.delete(jobId), GUEST_JOB_TTL_MS).unref();
+}
+
+// Runs the multi-call LLM pipeline for a guest analysis in the background so
+// the startAnalyse mutation can return immediately — see the runAnalysisJob
+// comment below for why this matters (avoiding a single long blocking
+// request that can be killed by a platform/proxy timeout).
+async function runGuestAnalysisJob(jobId: string, input: z.infer<typeof guestAnalysisSchema>) {
+  try {
+    const evidenceParagraphs = paragraphize(input.evidenceText);
+    const targetParagraphs = paragraphize(input.targetText);
+    const [items, requirements] = await Promise.all([extractEvidenceItems(input.evidenceText), extractRequirements(input.targetText)]);
+    if (!items.length) throw new Error("No extractable evidence was found in the supplied evidence text.");
+    if (!requirements.length) throw new Error("No individual criteria were found in the target specification.");
+    const evidence = items.map((item, index) => ({
+      id: index + 1,
+      documentId: "guest-evidence",
+      statement: item.statement,
+      excerpt: item.excerpt,
+      sourceLocation: locationForParagraph(item.paragraphIndex, evidenceParagraphs),
+      category: item.category,
+      evidenceType: item.evidenceType,
+      confidence: item.confidence,
+    }));
+    const criteria = requirements.map((item, index) => ({
+      id: index + 1,
+      category: item.category,
+      criterion: item.criterion,
+      sourceLocation: locationForParagraph(item.paragraphIndex, targetParagraphs),
+    }));
+    const mappings = await mapEvidenceToRequirements(
+      criteria.map(item => ({ requirementId: item.id, criterion: item.criterion, category: item.category })),
+      evidence.map(item => ({ id: item.id, statement: item.statement, excerpt: item.excerpt, source: "Pasted professional evidence", location: item.sourceLocation, category: item.category, evidenceType: item.evidenceType })),
+    );
+    const sourceDocument = { id: 1, title: "Pasted professional evidence", extractedText: input.evidenceText };
+    const conflicts: { type: string; severity: "review" | "unsupported"; claim: string; explanation: string; evidenceIds: number[] }[] = detectPlainTextConflicts([sourceDocument]);
+    const projectLeadClaim = input.ownClaims && /\b(?:led|lead)\b[^.]{0,100}\b(?:project|audit|improvement|QI)\b/i.test(input.ownClaims);
+    const participantEvidence = evidence.filter(item => /participant in the project team|does not identify .* project lead|not identified as project lead/i.test(item.excerpt));
+    if (projectLeadClaim && participantEvidence.length) {
+      conflicts.push({ type: "Claim unsupported by source", severity: "unsupported", claim: "The submitted claim describes project leadership.", explanation: "The submitted source text identifies participation and does not establish project leadership. The claim is not treated as demonstrated without direct leadership evidence.", evidenceIds: participantEvidence.map(item => item.id) });
+    }
+    const result: GuestAnalysisResult = {
+      isGuest: true,
+      label: "Guest analysis — this session is not saved.",
+      disclaimer,
+      summary: buildSummary("A", mappings),
+      profile: { id: "guest-profile", currentRole: input.currentRole ?? "Guest professional", profession: input.profession ?? "Professional", targetRole: input.targetRole ?? "Target role", ownClaims: input.ownClaims ?? null },
+      documents: [
+        { id: "guest-evidence", title: "Pasted professional evidence", fileName: "not-saved.txt", sourceKind: "Guest input", documentType: "evidence", extractedText: input.evidenceText, extractionStatus: "ready", isDemo: "no" },
+        { id: "guest-target", title: "Pasted target specification", fileName: "not-saved-target.txt", sourceKind: "Guest input", documentType: "target", extractedText: input.targetText, extractionStatus: "ready", isDemo: "no" },
+      ],
+      targetDocument: { id: "guest-target", title: "Pasted target specification", fileName: "not-saved-target.txt", sourceKind: "Guest input", documentType: "target", extractedText: input.targetText, extractionStatus: "ready", isDemo: "no" },
+      requirements: criteria,
+      evidence,
+      assessments: mappings,
+      contradictions: conflicts.map((item, index) => ({ id: index + 1, ...item })),
+    };
+    guestJobs.set(jobId, { status: "complete", result });
+  } catch (error) {
+    console.error("[Guest analysis] background job failed", { jobId, error });
+    guestJobs.set(jobId, { status: "failed", error: error instanceof Error ? error.message : "Guest analysis failed unexpectedly." });
+  }
+}
+
+// The analysis pipeline makes several sequential LLM calls (extract, map,
+// appraise) which can take longer than a typical platform/proxy timeout
+// (Manus hit this as a 524 gateway timeout on longer submissions). Rather
+// than blocking the runAnalysis mutation's HTTP response on the full
+// pipeline, the mutation inserts a "processing" row and returns immediately;
+// this function does the actual work in the background and the frontend
+// polls analysisStatus until the row's status flips to complete/failed.
+async function runAnalysisJob(
+  analysisId: number,
+  objective: "A" | "B" | "C",
+  workspace: Awaited<ReturnType<typeof getWorkspace>>,
+  requirements: Awaited<ReturnType<typeof getWorkspace>>["requirements"]
+) {
+  const db = await getDb();
+  if (!db) return;
+  try {
+    const evidenceWithSources = workspace.evidence.map(item => ({ ...item, source: workspace.documents.find(document => document.id === item.documentId)?.title ?? "Source document" }));
+    const lensEvidence = evidenceWithSources.map(item => ({ id: item.id, statement: item.statement, excerpt: item.excerpt, source: item.source, location: item.sourceLocation, category: item.category, evidenceType: item.evidenceType }));
+    let mappings: MappingDraft[] = [];
+    let objectiveReport: any;
+    if (objective === "A") {
+      mappings = await mapEvidenceToRequirements(requirements.map(item => ({ requirementId: item.id, criterion: item.criterion, category: item.category })), lensEvidence);
+      objectiveReport = { objective: "A", mappings };
+      await db.insert(criterionAssessments).values(mappings.map(item => ({ analysisId, requirementId: item.requirementId, assessment: item.assessment, strength: item.strength, evidenceIds: item.evidenceIds, interpretation: item.interpretation, gap: item.gap, nextStep: item.nextStep })));
+    } else if (objective === "B") {
+      try {
+        objectiveReport = await analyseAnnualAppraisal(lensEvidence);
+      } catch (error) {
+        const reason = error instanceof AppraisalGenerationError ? error.reason : "api_failure";
+        const message = `Objective B could not generate a validated, source-linked appraisal report (${reason.replace(/_/g, " ")}). No empty report has been saved. Please try again; if the problem persists, contact support with this message.`;
+        console.error("[Objective B] generation failed", { analysisId, reason });
+        await db.update(evidenceAnalyses).set({ status: "failed", generatedSummary: message, objectiveReport: null }).where(eq(evidenceAnalyses.id, analysisId));
+        return;
+      }
+    } else {
+      objectiveReport = await analyseJobEvaluation(workspace.currentRoleResponsibilities.map(item => ({ responsibilityId: item.id, responsibility: item.criterion, category: item.category, source: workspace.currentRoleDocument?.title ?? "Current role description", location: item.sourceLocation })), lensEvidence);
+    }
+    const conflicts: { type: string; severity: "review" | "unsupported"; claim: string; explanation: string; evidenceIds: number[] }[] = detectPlainTextConflicts(workspace.documents.filter(document => document.documentType === "evidence"));
+    const projectLeadClaim = workspace.profile?.ownClaims && /\b(?:led|lead)\b[^.]{0,100}\b(?:project|audit|improvement|QI)\b/i.test(workspace.profile.ownClaims);
+    const participantDocs = workspace.documents.filter(document => /participant in the project team|does not identify .* project lead|not identified as project lead/i.test(document.extractedText));
+    if (projectLeadClaim && participantDocs.length) conflicts.push({ type: "Claim unsupported by source", severity: "unsupported", claim: "The profile describes project leadership.", explanation: "The supplied project documentation identifies participation and does not establish project leadership. The claim should not be treated as demonstrated until direct leadership evidence is supplied.", evidenceIds: workspace.evidence.filter(item => participantDocs.some(document => document.id === item.documentId)).map(item => item.id) });
+    if (conflicts.length) await db.insert(evidenceContradictions).values(conflicts.map(item => ({ analysisId, ...item })));
+    const summary = buildObjectiveSummary(objective, objectiveReport, mappings);
+    await db.update(evidenceAnalyses).set({ status: "complete", generatedSummary: summary, objectiveReport }).where(eq(evidenceAnalyses.id, analysisId));
+  } catch (error) {
+    console.error("[Analysis] background job failed", { analysisId, objective, error });
+    await db
+      .update(evidenceAnalyses)
+      .set({ status: "failed", generatedSummary: "Automated analysis failed unexpectedly. Please try again." })
+      .where(eq(evidenceAnalyses.id, analysisId))
+      .catch(updateError => console.error("[Analysis] failed to record failure status", { analysisId, updateError }));
+  }
+}
+
 export const appRouter = router({
   system: systemRouter,
   auth: router({
@@ -111,55 +257,17 @@ export const appRouter = router({
     })),
   }),
   guest: router({
-    analyse: publicProcedure.input(guestAnalysisSchema).mutation(async ({ input }) => {
-      const evidenceParagraphs = paragraphize(input.evidenceText);
-      const targetParagraphs = paragraphize(input.targetText);
-      const [items, requirements] = await Promise.all([extractEvidenceItems(input.evidenceText), extractRequirements(input.targetText)]);
-      if (!items.length) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "No extractable evidence was found in the supplied evidence text." });
-      if (!requirements.length) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "No individual criteria were found in the target specification." });
-      const evidence = items.map((item, index) => ({
-        id: index + 1,
-        documentId: "guest-evidence",
-        statement: item.statement,
-        excerpt: item.excerpt,
-        sourceLocation: locationForParagraph(item.paragraphIndex, evidenceParagraphs),
-        category: item.category,
-        evidenceType: item.evidenceType,
-        confidence: item.confidence,
-      }));
-      const criteria = requirements.map((item, index) => ({
-        id: index + 1,
-        category: item.category,
-        criterion: item.criterion,
-        sourceLocation: locationForParagraph(item.paragraphIndex, targetParagraphs),
-      }));
-      const mappings = await mapEvidenceToRequirements(
-        criteria.map(item => ({ requirementId: item.id, criterion: item.criterion, category: item.category })),
-        evidence.map(item => ({ id: item.id, statement: item.statement, excerpt: item.excerpt, source: "Pasted professional evidence", location: item.sourceLocation, category: item.category, evidenceType: item.evidenceType })),
-      );
-      const sourceDocument = { id: 1, title: "Pasted professional evidence", extractedText: input.evidenceText };
-      const conflicts: { type: string; severity: "review" | "unsupported"; claim: string; explanation: string; evidenceIds: number[] }[] = detectPlainTextConflicts([sourceDocument]);
-      const projectLeadClaim = input.ownClaims && /\b(?:led|lead)\b[^.]{0,100}\b(?:project|audit|improvement|QI)\b/i.test(input.ownClaims);
-      const participantEvidence = evidence.filter(item => /participant in the project team|does not identify .* project lead|not identified as project lead/i.test(item.excerpt));
-      if (projectLeadClaim && participantEvidence.length) {
-        conflicts.push({ type: "Claim unsupported by source", severity: "unsupported", claim: "The submitted claim describes project leadership.", explanation: "The submitted source text identifies participation and does not establish project leadership. The claim is not treated as demonstrated without direct leadership evidence.", evidenceIds: participantEvidence.map(item => item.id) });
-      }
-      return {
-        isGuest: true,
-        label: "Guest analysis — this session is not saved.",
-        disclaimer,
-        summary: buildSummary("A", mappings),
-        profile: { id: "guest-profile", currentRole: input.currentRole ?? "Guest professional", profession: input.profession ?? "Professional", targetRole: input.targetRole ?? "Target role", ownClaims: input.ownClaims ?? null },
-        documents: [
-          { id: "guest-evidence", title: "Pasted professional evidence", fileName: "not-saved.txt", sourceKind: "Guest input", documentType: "evidence", extractedText: input.evidenceText, extractionStatus: "ready", isDemo: "no" },
-          { id: "guest-target", title: "Pasted target specification", fileName: "not-saved-target.txt", sourceKind: "Guest input", documentType: "target", extractedText: input.targetText, extractionStatus: "ready", isDemo: "no" },
-        ],
-        targetDocument: { id: "guest-target", title: "Pasted target specification", fileName: "not-saved-target.txt", sourceKind: "Guest input", documentType: "target", extractedText: input.targetText, extractionStatus: "ready", isDemo: "no" },
-        requirements: criteria,
-        evidence,
-        assessments: mappings,
-        contradictions: conflicts.map((item, index) => ({ id: index + 1, ...item })),
-      };
+    startAnalyse: publicProcedure.input(guestAnalysisSchema).mutation(async ({ input }) => {
+      const jobId = randomUUID();
+      guestJobs.set(jobId, { status: "processing" });
+      scheduleGuestJobCleanup(jobId);
+      void runGuestAnalysisJob(jobId, input);
+      return { jobId };
+    }),
+    analyseStatus: publicProcedure.input(z.object({ jobId: z.string().min(1) })).query(({ input }) => {
+      const job = guestJobs.get(input.jobId);
+      if (!job) throw new TRPCError({ code: "NOT_FOUND", message: "This guest analysis session has expired or was not found. Please submit again." });
+      return job;
     }),
   }),
   evidence: router({
@@ -220,35 +328,17 @@ export const appRouter = router({
       const titles = { A: `Objective A promotion mapping — ${target?.title ?? "target specification"}`, B: "Objective B annual appraisal evidence summary", C: `Objective C job evaluation preparation — ${workspace.currentRoleDocument?.title ?? "current role description"}` };
       const result = await db.insert(evidenceAnalyses).values({ userId: ctx.user.id, profileId: workspace.profile?.id ?? null, targetDocumentId: target?.id ?? null, objective: input.objective, title: titles[input.objective], status: "processing" });
       const analysisId = asId(result);
-      const evidenceWithSources = workspace.evidence.map(item => ({ ...item, source: workspace.documents.find(document => document.id === item.documentId)?.title ?? "Source document" }));
-      const lensEvidence = evidenceWithSources.map(item => ({ id: item.id, statement: item.statement, excerpt: item.excerpt, source: item.source, location: item.sourceLocation, category: item.category, evidenceType: item.evidenceType }));
-      let mappings: any[] = [];
-      let objectiveReport: any;
-      if (input.objective === "A") {
-        mappings = await mapEvidenceToRequirements(requirements.map(item => ({ requirementId: item.id, criterion: item.criterion, category: item.category })), lensEvidence);
-        objectiveReport = { objective: "A", mappings };
-        await db.insert(criterionAssessments).values(mappings.map(item => ({ analysisId, requirementId: item.requirementId, assessment: item.assessment, strength: item.strength, evidenceIds: item.evidenceIds, interpretation: item.interpretation, gap: item.gap, nextStep: item.nextStep })));
-      } else if (input.objective === "B") {
-        try {
-          objectiveReport = await analyseAnnualAppraisal(lensEvidence);
-        } catch (error) {
-          const reason = error instanceof AppraisalGenerationError ? error.reason : "api_failure";
-          const message = `Objective B could not generate a validated, source-linked appraisal report (${reason.replace(/_/g, " ")}). No empty report has been saved. Please try again; if the problem persists, contact support with this message.`;
-          console.error("[Objective B] generation failed", { analysisId, reason });
-          await db.update(evidenceAnalyses).set({ status: "failed", generatedSummary: message, objectiveReport: null }).where(eq(evidenceAnalyses.id, analysisId));
-          throw new TRPCError({ code: "BAD_GATEWAY", message });
-        }
-      } else {
-        objectiveReport = await analyseJobEvaluation(workspace.currentRoleResponsibilities.map(item => ({ responsibilityId: item.id, responsibility: item.criterion, category: item.category, source: workspace.currentRoleDocument?.title ?? "Current role description", location: item.sourceLocation })), lensEvidence);
-      }
-      const conflicts: { type: string; severity: "review" | "unsupported"; claim: string; explanation: string; evidenceIds: number[] }[] = detectPlainTextConflicts(workspace.documents.filter(document => document.documentType === "evidence"));
-      const projectLeadClaim = workspace.profile?.ownClaims && /\b(?:led|lead)\b[^.]{0,100}\b(?:project|audit|improvement|QI)\b/i.test(workspace.profile.ownClaims);
-      const participantDocs = workspace.documents.filter(document => /participant in the project team|does not identify .* project lead|not identified as project lead/i.test(document.extractedText));
-      if (projectLeadClaim && participantDocs.length) conflicts.push({ type: "Claim unsupported by source", severity: "unsupported", claim: "The profile describes project leadership.", explanation: "The supplied project documentation identifies participation and does not establish project leadership. The claim should not be treated as demonstrated until direct leadership evidence is supplied.", evidenceIds: workspace.evidence.filter(item => participantDocs.some(document => document.id === item.documentId)).map(item => item.id) });
-      if (conflicts.length) await db.insert(evidenceContradictions).values(conflicts.map(item => ({ analysisId, ...item })));
-      const summary = buildObjectiveSummary(input.objective, objectiveReport, mappings);
-      await db.update(evidenceAnalyses).set({ status: "complete", generatedSummary: summary, objectiveReport }).where(eq(evidenceAnalyses.id, analysisId));
-      return { analysisId, summary, objectiveReport };
+      // Runs the LLM pipeline in the background and returns immediately — see
+      // the runAnalysisJob comment for why this endpoint doesn't await it.
+      void runAnalysisJob(analysisId, input.objective, workspace, requirements);
+      return { analysisId, status: "processing" as const };
+    }),
+    analysisStatus: protectedProcedure.input(z.object({ analysisId: z.number().int().positive() })).query(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "The evidence library is temporarily unavailable." });
+      const [analysis] = await db.select().from(evidenceAnalyses).where(and(eq(evidenceAnalyses.userId, ctx.user.id), eq(evidenceAnalyses.id, input.analysisId))).limit(1);
+      if (!analysis) throw new TRPCError({ code: "NOT_FOUND", message: "Analysis not found." });
+      return { analysisId: analysis.id, objective: analysis.objective, status: analysis.status, summary: analysis.generatedSummary, objectiveReport: analysis.objectiveReport };
     }),
     loadDemo: protectedProcedure.mutation(async ({ ctx }) => {
       const db = await getDb();
