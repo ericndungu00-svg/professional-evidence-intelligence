@@ -1,4 +1,17 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { randomUUID } from "crypto";
+import {
+  FinishReason,
+  FunctionCallingConfigMode,
+  GoogleGenAI,
+  type Content,
+  type FunctionDeclaration,
+  type GenerateContentConfig,
+  type GenerateContentResponse,
+  type Part,
+  type ThinkingConfig,
+  type Tool as GeminiTool,
+  type ToolConfig as GeminiToolConfig,
+} from "@google/genai";
 import { ENV } from "./env";
 
 export type Role = "system" | "user" | "assistant" | "tool" | "function";
@@ -202,65 +215,58 @@ const normalizeResponseFormat = ({
   };
 };
 
-// Anthropic requires max_tokens on every request (OpenAI-compatible proxies
-// usually apply their own server-side default when it's omitted).
-const DEFAULT_MAX_TOKENS = 8192;
-// Anthropic has no server-side default model; callers in this codebase always
+// Gemini has no server-side default model; callers in this codebase always
 // pass one, but this keeps invokeLLM from throwing an unhelpful error if one
 // is ever omitted.
-const DEFAULT_MODEL = "claude-sonnet-5";
-
+const DEFAULT_MODEL = "gemini-2.5-flash";
+const DEFAULT_MAX_TOKENS = 8192;
 const EFFORT_LEVELS = new Set(["low", "medium", "high", "xhigh", "max"]);
 
-let cachedClient: Anthropic | null = null;
+let cachedClient: GoogleGenAI | null = null;
 
-const getClient = (): Anthropic => {
-  if (!ENV.anthropicApiKey) {
-    throw new Error("ANTHROPIC_API_KEY is not configured");
+const getClient = (): GoogleGenAI => {
+  if (!ENV.geminiApiKey) {
+    throw new Error("GEMINI_API_KEY is not configured");
   }
   if (!cachedClient) {
-    // Bump retries a little above the SDK default (2) to match the resilience
-    // the previous Forge-proxy client had against transient 429/5xx errors.
-    cachedClient = new Anthropic({ apiKey: ENV.anthropicApiKey, maxRetries: 4 });
+    cachedClient = new GoogleGenAI({ apiKey: ENV.geminiApiKey });
   }
   return cachedClient;
 };
 
-const toAnthropicContentBlock = (
-  part: MessageContent
-): Anthropic.ContentBlockParam => {
+const toGeminiPart = (part: MessageContent): Part => {
   if (typeof part === "string") {
-    return { type: "text", text: part };
+    return { text: part };
   }
 
   if (part.type === "text") {
-    return { type: "text", text: part.text };
+    return { text: part.text };
   }
 
   if (part.type === "image_url") {
-    return { type: "image", source: { type: "url", url: part.image_url.url } };
+    return { fileData: { fileUri: part.image_url.url } };
   }
 
   if (part.type === "file_url") {
-    if (part.file_url.mime_type === "application/pdf") {
-      return { type: "document", source: { type: "url", url: part.file_url.url } };
+    if (part.file_url.mime_type) {
+      return { fileData: { fileUri: part.file_url.url, mimeType: part.file_url.mime_type } };
     }
-    throw new Error(
-      `Unsupported file content type for the Anthropic API: ${part.file_url.mime_type ?? "unknown"}`
-    );
+    throw new Error("File content requires a mime_type for the Gemini API");
   }
 
   throw new Error("Unsupported message content part");
 };
 
-// Anthropic keeps system prompts in a separate top-level field and expects
-// tool results as content blocks on a user turn, rather than a dedicated
-// "tool" role — this reshapes the OpenAI-style flat message list accordingly.
-const buildAnthropicMessages = (
+// Gemini keeps the system prompt in a separate top-level field, uses "model"
+// instead of "assistant" for the model's own turns, and represents a tool
+// result as a functionResponse part on a "user" turn rather than a
+// dedicated "tool" role — this reshapes the OpenAI-style flat message list
+// accordingly.
+const buildGeminiRequest = (
   messages: Message[]
-): { system?: string; messages: Anthropic.MessageParam[] } => {
+): { systemInstruction?: string; contents: Content[] } => {
   const systemParts: string[] = [];
-  const anthropicMessages: Anthropic.MessageParam[] = [];
+  const contents: Content[] = [];
 
   for (const message of messages) {
     if (message.role === "system") {
@@ -273,126 +279,112 @@ const buildAnthropicMessages = (
     }
 
     if (message.role === "tool" || message.role === "function") {
-      if (!message.tool_call_id) {
-        throw new Error("tool/function role messages require a tool_call_id");
-      }
-      const text = ensureArray(message.content)
+      const responseText = ensureArray(message.content)
         .map(part => (typeof part === "string" ? part : JSON.stringify(part)))
         .join("\n");
-      anthropicMessages.push({
+      contents.push({
         role: "user",
-        content: [{ type: "tool_result", tool_use_id: message.tool_call_id, content: text }],
+        parts: [{ functionResponse: { name: message.name ?? "tool_result", response: { output: responseText } } }],
       });
       continue;
     }
 
-    anthropicMessages.push({
-      role: message.role === "assistant" ? "assistant" : "user",
-      content: ensureArray(message.content).map(toAnthropicContentBlock),
+    contents.push({
+      role: message.role === "assistant" ? "model" : "user",
+      parts: ensureArray(message.content).map(toGeminiPart),
     });
   }
 
   return {
-    system: systemParts.length ? systemParts.join("\n\n") : undefined,
-    messages: anthropicMessages,
+    systemInstruction: systemParts.length ? systemParts.join("\n\n") : undefined,
+    contents,
   };
 };
 
-const toAnthropicTools = (tools: Tool[] | undefined): Anthropic.Tool[] | undefined => {
+const toGeminiTools = (tools: Tool[] | undefined): GeminiTool[] | undefined => {
   if (!tools || tools.length === 0) return undefined;
-  return tools.map(tool => ({
+  const functionDeclarations: FunctionDeclaration[] = tools.map(tool => ({
     name: tool.function.name,
     description: tool.function.description,
-    input_schema: (tool.function.parameters ?? { type: "object", properties: {} }) as Anthropic.Tool.InputSchema,
+    parametersJsonSchema: tool.function.parameters ?? { type: "object", properties: {} },
   }));
+  return [{ functionDeclarations }];
 };
 
-const toAnthropicToolChoice = (
+const toGeminiToolConfig = (
   toolChoice: "none" | "auto" | ToolChoiceExplicit | undefined
-): Anthropic.ToolChoice | undefined => {
+): GeminiToolConfig | undefined => {
   if (!toolChoice) return undefined;
-  if (toolChoice === "none") return { type: "none" };
-  if (toolChoice === "auto") return { type: "auto" };
-  return { type: "tool", name: toolChoice.function.name };
+  if (toolChoice === "none") return { functionCallingConfig: { mode: FunctionCallingConfigMode.NONE } };
+  if (toolChoice === "auto") return { functionCallingConfig: { mode: FunctionCallingConfigMode.AUTO } };
+  return { functionCallingConfig: { mode: FunctionCallingConfigMode.ANY, allowedFunctionNames: [toolChoice.function.name] } };
 };
 
 // The `reasoning: { effort }` shape mirrors OpenAI's reasoning-effort models;
-// Anthropic's closest equivalent is output_config.effort, so an explicit
-// effort level is carried over. There's no Anthropic analogue for "no
-// reasoning effort configured" beyond leaving effort unset (adaptive
-// thinking decides on its own), so anything else is dropped rather than
-// guessed at.
-const toOutputConfig = (
-  responseFormat: ReturnType<typeof normalizeResponseFormat>,
+// Gemini's closest equivalent is a thinking budget. There's no direct
+// analogue for every effort level, so only "low" (the only value this
+// codebase actually sends) is translated, to disabled thinking — the
+// fastest/cheapest option, matching the intent of a low-effort request.
+// An explicit `thinking` block (already Gemini-shaped) is passed through as-is.
+const toThinkingConfig = (
+  thinking: Record<string, unknown> | undefined,
   reasoning: Record<string, unknown> | undefined
-): Anthropic.Messages.OutputConfig | undefined => {
-  const config: Anthropic.Messages.OutputConfig = {};
-
-  if (responseFormat?.type === "json_schema") {
-    config.format = { type: "json_schema", schema: responseFormat.json_schema.schema };
-  }
-
-  const effort = reasoning?.effort;
-  if (typeof effort === "string" && EFFORT_LEVELS.has(effort)) {
-    config.effort = effort as Anthropic.Messages.OutputConfig["effort"];
-  }
-
-  return Object.keys(config).length > 0 ? config : undefined;
+): ThinkingConfig | undefined => {
+  if (thinking) return thinking as unknown as ThinkingConfig;
+  if (reasoning?.effort === "low") return { thinkingBudget: 0 };
+  return undefined;
 };
 
-const toFinishReason = (stopReason: Anthropic.Messages.StopReason | null): string | null => {
-  switch (stopReason) {
-    case "end_turn":
-    case "stop_sequence":
-      return "stop";
-    case "max_tokens":
-      return "length";
-    case "tool_use":
-      return "tool_calls";
-    case "refusal":
-      return "content_filter";
-    case null:
+const toFinishReason = (finishReason: FinishReason | undefined): string | null => {
+  switch (finishReason) {
+    case undefined:
+    case FinishReason.FINISH_REASON_UNSPECIFIED:
       return null;
+    case FinishReason.STOP:
+      return "stop";
+    case FinishReason.MAX_TOKENS:
+      return "length";
+    case FinishReason.SAFETY:
+    case FinishReason.PROHIBITED_CONTENT:
+    case FinishReason.BLOCKLIST:
+    case FinishReason.SPII:
+    case FinishReason.RECITATION:
+      return "content_filter";
+    case FinishReason.MALFORMED_FUNCTION_CALL:
+    case FinishReason.UNEXPECTED_TOOL_CALL:
+      return "tool_calls";
     default:
-      return stopReason;
+      return finishReason;
   }
 };
 
-const toInvokeResult = (response: Anthropic.Message): InvokeResult => {
-  const textParts: string[] = [];
-  const toolCalls: ToolCall[] = [];
-
-  for (const block of response.content) {
-    if (block.type === "text") {
-      textParts.push(block.text);
-    } else if (block.type === "tool_use") {
-      toolCalls.push({
-        id: block.id,
-        type: "function",
-        function: { name: block.name, arguments: JSON.stringify(block.input) },
-      });
-    }
-  }
+const toInvokeResult = (response: GenerateContentResponse, model: string): InvokeResult => {
+  const candidate = response.candidates?.[0];
+  const toolCalls: ToolCall[] = (response.functionCalls ?? []).map((call, index) => ({
+    id: call.id ?? `${response.responseId ?? "call"}_${index}`,
+    type: "function",
+    function: { name: call.name ?? "", arguments: JSON.stringify(call.args ?? {}) },
+  }));
 
   return {
-    id: response.id,
+    id: response.responseId ?? randomUUID(),
     created: Math.floor(Date.now() / 1000),
-    model: response.model,
+    model: response.modelVersion ?? model,
     choices: [
       {
         index: 0,
         message: {
           role: "assistant",
-          content: textParts.join(""),
+          content: response.text ?? "",
           ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
         },
-        finish_reason: toFinishReason(response.stop_reason),
+        finish_reason: toFinishReason(candidate?.finishReason),
       },
     ],
     usage: {
-      prompt_tokens: response.usage.input_tokens,
-      completion_tokens: response.usage.output_tokens,
-      total_tokens: response.usage.input_tokens + response.usage.output_tokens,
+      prompt_tokens: response.usageMetadata?.promptTokenCount ?? 0,
+      completion_tokens: response.usageMetadata?.candidatesTokenCount ?? 0,
+      total_tokens: response.usageMetadata?.totalTokenCount ?? 0,
     },
   };
 };
@@ -416,38 +408,39 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     max_tokens,
   } = params;
 
-  const { system, messages: anthropicMessages } = buildAnthropicMessages(messages);
+  const { systemInstruction, contents } = buildGeminiRequest(messages);
   const normalizedResponseFormat = normalizeResponseFormat({
     responseFormat,
     response_format,
     outputSchema,
     output_schema,
   });
-  const anthropicTools = toAnthropicTools(tools);
-  const anthropicToolChoice = toAnthropicToolChoice(normalizeToolChoice(toolChoice || tool_choice, tools));
-  const outputConfig = toOutputConfig(normalizedResponseFormat, reasoning);
+  const geminiTools = toGeminiTools(tools);
+  const geminiToolConfig = toGeminiToolConfig(normalizeToolChoice(toolChoice || tool_choice, tools));
+  const thinkingConfig = toThinkingConfig(thinking, reasoning);
 
-  const request: Anthropic.MessageCreateParamsNonStreaming = {
-    model: model || DEFAULT_MODEL,
-    max_tokens: max_tokens ?? maxTokens ?? DEFAULT_MAX_TOKENS,
-    messages: anthropicMessages,
-    ...(system ? { system } : {}),
-    ...(anthropicTools ? { tools: anthropicTools } : {}),
-    ...(anthropicToolChoice ? { tool_choice: anthropicToolChoice } : {}),
-    ...(outputConfig ? { output_config: outputConfig } : {}),
-    ...(thinking ? { thinking: thinking as unknown as Anthropic.Messages.ThinkingConfigParam } : {}),
+  const config: GenerateContentConfig = {
+    maxOutputTokens: max_tokens ?? maxTokens ?? DEFAULT_MAX_TOKENS,
+    ...(systemInstruction ? { systemInstruction } : {}),
+    ...(geminiTools ? { tools: geminiTools } : {}),
+    ...(geminiToolConfig ? { toolConfig: geminiToolConfig } : {}),
+    ...(thinkingConfig ? { thinkingConfig } : {}),
   };
 
+  if (normalizedResponseFormat?.type === "json_schema") {
+    config.responseMimeType = "application/json";
+    config.responseJsonSchema = normalizedResponseFormat.json_schema.schema;
+  } else if (normalizedResponseFormat?.type === "json_object") {
+    config.responseMimeType = "application/json";
+  }
+
+  const resolvedModel = model || DEFAULT_MODEL;
+
   try {
-    const response = await client.messages.create(request);
-    return toInvokeResult(response);
+    const response = await client.models.generateContent({ model: resolvedModel, contents, config });
+    return toInvokeResult(response, resolvedModel);
   } catch (error) {
-    if (error instanceof Anthropic.APIError) {
-      throw new Error(
-        `LLM invoke failed: ${error.status ?? "unknown"} ${error.name} – ${error.message}`
-      );
-    }
-    throw error;
+    throw new Error(`LLM invoke failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
@@ -467,22 +460,17 @@ export async function listLLMModels(): Promise<ModelsResponse> {
   const client = getClient();
 
   try {
-    const page = await client.models.list();
+    const pager = await client.models.list();
     return {
       object: "list",
-      data: page.data.map(model => ({
-        id: model.id,
+      data: pager.page.map(model => ({
+        id: model.name ?? "",
         object: "model",
-        created: Math.floor(new Date(model.created_at).getTime() / 1000),
-        owned_by: "anthropic",
+        created: 0,
+        owned_by: "google",
       })),
     };
   } catch (error) {
-    if (error instanceof Anthropic.APIError) {
-      throw new Error(
-        `List LLM models failed: ${error.status ?? "unknown"} ${error.name} – ${error.message}`
-      );
-    }
-    throw error;
+    throw new Error(`List LLM models failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 }

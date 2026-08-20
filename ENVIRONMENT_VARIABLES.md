@@ -12,9 +12,9 @@ This file lists the configuration names used by the export. **It contains no sec
 | `OAUTH_SERVER_URL` | Yes for Manus OAuth | Manus OAuth API origin. | Replace with your identity provider's configuration where applicable. |
 | `VITE_OAUTH_PORTAL_URL` | Yes for Manus OAuth | Browser-facing OAuth portal origin. | Replace with your identity provider's login origin. |
 | `OWNER_OPEN_ID` | Optional | Identifies the initial owner/admin in the existing OAuth flow. | Define a corresponding administrator bootstrap approach externally. |
-| `ANTHROPIC_API_KEY` | Yes | Server-side Anthropic API credential used by `server/_core/llm.ts`. | Store only in the server-side secret manager; never expose it to the frontend. |
-| `BUILT_IN_FORGE_API_URL` | Yes for the remaining storage adapter | Server-side Manus Forge service origin. | No longer used by the LLM adapter (replaced by `ANTHROPIC_API_KEY`); still used by `server/storage.ts` until object storage is replaced. |
-| `BUILT_IN_FORGE_API_KEY` | Yes for the remaining storage adapter | Server-side Manus Forge credential. | No longer used by the LLM adapter (replaced by `ANTHROPIC_API_KEY`); still used by `server/storage.ts` until object storage is replaced. |
+| `GEMINI_API_KEY` | Yes | Server-side Google Gemini API credential (from Google AI Studio) used by `server/_core/llm.ts`. | Store only in the server-side secret manager; never expose it to the frontend. |
+| `BUILT_IN_FORGE_API_URL` | Yes for the remaining storage adapter | Server-side Manus Forge service origin. | No longer used by the LLM adapter (replaced by `GEMINI_API_KEY`); still used by `server/storage.ts` until object storage is replaced. |
+| `BUILT_IN_FORGE_API_KEY` | Yes for the remaining storage adapter | Server-side Manus Forge credential. | No longer used by the LLM adapter (replaced by `GEMINI_API_KEY`); still used by `server/storage.ts` until object storage is replaced. |
 | `VITE_FRONTEND_FORGE_API_URL` | Current Manus frontend integration | Browser-facing Forge service origin. | Remove or replace any dependent client integration outside Manus. |
 | `VITE_FRONTEND_FORGE_API_KEY` | Current Manus frontend integration | Scoped frontend Forge token. | Do not substitute a server secret; use a public/scoped value only if required by a replacement integration. |
 
