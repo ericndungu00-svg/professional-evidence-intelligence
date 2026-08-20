@@ -394,7 +394,13 @@ export async function analyseAnnualAppraisal(evidence: EvidenceInput[]): Promise
   try {
     const response = await invokeAppraisalWithinDeadline({
       model: APPRAISAL_MODEL,
-      maxTokens: 1800,
+      // Gemini spends part of maxTokens on invisible "thinking" before
+      // writing visible output when reasoning effort isn't specified — for
+      // A/C this is already set, but B originally omitted it. Confirmed live
+      // against real evidence: without this, B's response was truncated
+      // (finish_reason "length") well before the JSON body was written.
+      reasoning: { effort: "low" },
+      maxTokens: 3000,
       messages: [
         { role: "system", content: "Create a concise, cautious annual appraisal report from supplied evidence only. Return only JSON with exactly six arrays: documentedAchievements, documentedImpact, evidenceLimitations, developmentThemes, evidenceGroundedObjectives, suggestedEvidenceToRetain. Include exactly one concise source-linked finding in each array. Every item must have title, statement, evidenceIds, qualification, and action. Do not use a wrapper, metadata, headings, markdown, prose, or alternative keys. Keep documented contribution, project-level outcome, and evidence limitation separate. Never invent citations, upgrade participation to ownership, or attribute a team outcome to one individual without explicit source support." },
         { role: "user", content: `Use only supplied evidence IDs. Do not infer absence from evidence that was not selected.\n\nEvidence:\n${JSON.stringify(compactEvidence)}` },
@@ -422,7 +428,8 @@ export async function analyseAnnualAppraisal(evidence: EvidenceInput[]): Promise
       try {
         const fallbackResponse = await invokeAppraisalWithinDeadline({
           model: APPRAISAL_MODEL,
-          maxTokens: 1200,
+          reasoning: { effort: "low" },
+          maxTokens: 2000,
           messages: [
             { role: "system", content: "Return only JSON with exactly six arrays: documentedAchievements, documentedImpact, evidenceLimitations, developmentThemes, evidenceGroundedObjectives, suggestedEvidenceToRetain. Include exactly one concise finding in each array. Each finding must have title, statement, evidenceIds, qualification, and action. Do not use a wrapper, markdown, headings, metadata, or alternate keys. Use supplied evidence only and do not invent citations or ownership." },
             { role: "user", content: `Create a concise annual appraisal report from this representative source-linked evidence set. Use only listed IDs.\n\nEvidence:\n${JSON.stringify(compactEvidence.slice(0, 8))}` },
