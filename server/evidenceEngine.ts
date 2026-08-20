@@ -14,7 +14,7 @@ export type ExtractedItemDraft = {
 export type RequirementDraft = { category: string; criterion: string; paragraphIndex: number; ordinal: number };
 
 const MAX_TEXT_CHARS = 60000;
-const MODEL = "gpt-5-mini";
+const MODEL = "claude-sonnet-5";
 const APPRAISAL_MODEL = "claude-haiku-4-5";
 
 function normalizedText(value: string) {
