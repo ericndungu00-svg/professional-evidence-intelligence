@@ -7,7 +7,7 @@ import {
   evidenceDocuments,
   evidenceProfiles,
   extractedEvidence,
-  InsertUser,
+  sessions,
   targetRequirements,
   users,
 } from "../drizzle/schema";
@@ -22,21 +22,54 @@ export async function getDb() {
   return _db;
 }
 
-export async function upsertUser(user: InsertUser): Promise<void> {
-  if (!user.openId) throw new Error("User openId is required for upsert");
+export async function createUser(values: { email: string; passwordHash: string; name: string | null }) {
   const db = await getDb();
-  if (!db) return;
-  const values: InsertUser = { openId: user.openId, name: user.name ?? null, email: user.email ?? null, loginMethod: user.loginMethod ?? null, lastSignedIn: new Date() };
-  if (user.role !== undefined) values.role = user.role;
-  else if (user.openId === ENV.ownerOpenId) values.role = "admin";
-  await db.insert(users).values(values).onDuplicateKeyUpdate({ set: { name: values.name, email: values.email, loginMethod: values.loginMethod, lastSignedIn: new Date() } });
+  if (!db) throw new Error("Database is unavailable.");
+  const role = ENV.ownerEmail && values.email === ENV.ownerEmail ? "admin" : "user";
+  const result = await db.insert(users).values({ email: values.email, passwordHash: values.passwordHash, name: values.name, role });
+  const id = Number((Array.isArray(result) ? result[0] : result)?.insertId);
+  const [user] = await db.select().from(users).where(eq(users.id, id)).limit(1);
+  if (!user) throw new Error("Failed to create user");
+  return user;
 }
 
-export async function getUserByOpenId(openId: string) {
+export async function getUserByEmail(email: string) {
   const db = await getDb();
   if (!db) return undefined;
-  const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
+  const result = await db.select().from(users).where(eq(users.email, email)).limit(1);
   return result[0];
+}
+
+export async function getUserById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
+  return result[0];
+}
+
+export async function touchUserLastSignedIn(id: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(users).set({ lastSignedIn: new Date() }).where(eq(users.id, id));
+}
+
+export async function createSession(values: { id: string; userId: number; expiresAt: Date }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is unavailable.");
+  await db.insert(sessions).values(values);
+}
+
+export async function getSession(id: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(sessions).where(eq(sessions.id, id)).limit(1);
+  return result[0];
+}
+
+export async function deleteSession(id: string) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(sessions).where(eq(sessions.id, id));
 }
 
 export async function getWorkspace(userId: number) {

@@ -39,7 +39,7 @@ import type { TrpcContext } from "./_core/context";
 
 function context(): TrpcContext {
   return {
-    user: { id: 1, openId: "objective-b-test", name: "Test user", email: null, loginMethod: "test", role: "user", createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() },
+    user: { id: 1, email: "objective-b-test@example.com", passwordHash: "$2b$12$abcdefghijklmnopqrstuuvwxyzabcdefghijklmnopqrstuvwxy", name: "Test user", role: "user", createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() },
     req: { protocol: "https", headers: {} } as TrpcContext["req"],
     res: { clearCookie: vi.fn() } as TrpcContext["res"],
   };

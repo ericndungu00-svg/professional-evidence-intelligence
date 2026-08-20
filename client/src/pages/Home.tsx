@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { startLogin } from "@/const";
+import { AuthDialog } from "@/components/AuthDialog";
 import { trpc } from "@/lib/trpc";
 import { AlertTriangle, ArrowRight, BookOpenText, CheckCircle2, ChevronRight, CircleAlert, FileText, FolderOpen, Landmark, Loader2, LockKeyhole, Plus, Scale, SearchCheck, ShieldCheck, Sparkles, Target, Upload, X } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
@@ -54,6 +54,7 @@ export default function Home() {
   const [profileOpen, setProfileOpen] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [guestOpen, setGuestOpen] = useState(false);
+  const [authOpen, setAuthOpen] = useState(false);
   const [guestWorkspace, setGuestWorkspace] = useState<any>(null);
   const [entryDismissed, setEntryDismissed] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
@@ -141,7 +142,7 @@ export default function Home() {
   const isAnalysing = runAnalysis.isPending || analysisId !== null;
   const isGuestAnalysing = guestAnalysis.isPending || guestJobId !== null;
 
-  const ensureAuth = () => { if (!isAuthenticated) { toast.message("Sign in to save evidence to your private library."); startLogin(); return false; } return true; };
+  const ensureAuth = () => { if (!isAuthenticated) { toast.message("Sign in to save evidence to your private library."); setAuthOpen(true); return false; } return true; };
 
   async function handleProfile(event: FormEvent) {
     event.preventDefault();
@@ -172,7 +173,7 @@ export default function Home() {
         <div className="mx-auto flex max-w-[1540px] items-center justify-between gap-4 px-5 py-3 lg:px-8">
           <a href="#top" className="flex min-w-0 items-center gap-3"><span className="grid size-9 place-items-center rounded-md bg-primary text-primary-foreground"><SearchCheck className="size-5" /></span><span className="min-w-0"><span className="block text-[10px] font-bold uppercase tracking-[0.2em] text-primary">Evidence intelligence</span><span className="block truncate font-serif text-lg font-semibold leading-5">Professional evidence review</span></span></a>
           <div className="hidden items-center gap-5 text-xs text-muted-foreground md:flex"><span>Source-first assessment</span><span className="h-3 w-px bg-border" /><span>No invented evidence</span></div>
-          <div className="flex items-center gap-2">{isDemo && <Badge variant="outline" className="hidden border-amber-300 bg-amber-50 text-amber-800 sm:flex">Fictional demonstration</Badge>}{isGuest && <Badge variant="outline" className="hidden border-primary/30 bg-primary/5 text-primary sm:flex">Guest session — unsaved</Badge>}{isAuthenticated ? <><span className="hidden text-sm font-medium lg:inline">{user?.name}</span><Button variant="outline" size="sm" onClick={logout}>Sign out</Button></> : <Button size="sm" onClick={() => startLogin()}>Sign in to save a library</Button>}</div>
+          <div className="flex items-center gap-2">{isDemo && <Badge variant="outline" className="hidden border-amber-300 bg-amber-50 text-amber-800 sm:flex">Fictional demonstration</Badge>}{isGuest && <Badge variant="outline" className="hidden border-primary/30 bg-primary/5 text-primary sm:flex">Guest session — unsaved</Badge>}{isAuthenticated ? <><span className="hidden text-sm font-medium lg:inline">{user?.name}</span><Button variant="outline" size="sm" onClick={logout}>Sign out</Button></> : <Button size="sm" onClick={() => setAuthOpen(true)}>Sign in to save a library</Button>}</div>
         </div>
       </header>
 
@@ -203,6 +204,7 @@ export default function Home() {
       <div className="fixed inset-x-0 bottom-0 z-40 border-t border-primary/20 bg-primary px-4 py-2 text-center text-[11px] leading-4 text-primary-foreground shadow-lg">This tool provides decision support from supplied evidence only. It does not determine NHS AfC banding, employment eligibility, legal rights, job-evaluation outcomes, or professional competence.</div>
       {selectedSource?.evidence && <SourcePanel evidence={selectedSource.evidence} document={selectedSource.document} onClose={() => setSelectedEvidenceId(null)} />}
       <GuestAnalysisDialog open={guestOpen} onOpenChange={setGuestOpen} onSubmit={data => guestAnalysis.mutate(data)} pending={isGuestAnalysing} />
+      <AuthDialog open={authOpen} onOpenChange={setAuthOpen} />
     </div>
   );
 }

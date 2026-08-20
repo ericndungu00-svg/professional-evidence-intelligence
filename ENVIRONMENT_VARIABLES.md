@@ -7,11 +7,8 @@ This file lists the configuration names used by the export. **It contains no sec
 | `NODE_ENV` | Yes | Runtime mode, normally `development` or `production`. | Set according to the host environment. |
 | `PORT` | Host-dependent | Node HTTP port. | Do not hard-code a port; most hosts inject this. |
 | `DATABASE_URL` | Yes | MySQL/TiDB connection string for Drizzle. | Use SSL/TLS options where your database requires them. |
-| `JWT_SECRET` | Yes | Session cookie signing secret. | Generate a new strong random value for each deployment. |
-| `VITE_APP_ID` | Yes for Manus OAuth | Manus application identifier. | Replace the Manus OAuth flow for a non-Manus deployment. |
-| `OAUTH_SERVER_URL` | Yes for Manus OAuth | Manus OAuth API origin. | Replace with your identity provider's configuration where applicable. |
-| `VITE_OAUTH_PORTAL_URL` | Yes for Manus OAuth | Browser-facing OAuth portal origin. | Replace with your identity provider's login origin. |
-| `OWNER_OPEN_ID` | Optional | Identifies the initial owner/admin in the existing OAuth flow. | Define a corresponding administrator bootstrap approach externally. |
+| `SESSION_SECRET` | Yes | Server-side pepper mixed into the session-token hash (`server/_core/auth.ts`) — not a signing key, since sessions are looked up server-side, not verified statelessly. | Generate a new strong random value (e.g. `openssl rand -hex 32`) for each deployment; changing it invalidates all existing sessions. |
+| `OWNER_EMAIL` | Optional | The email address (lowercased) that should be granted the `admin` role automatically on signup. | Set to your own email before you sign up for the first time if you want an admin account; leave unset otherwise. |
 | `GEMINI_API_KEY` | Yes | Server-side Google Gemini API credential (from Google AI Studio) used by `server/_core/llm.ts`. | Store only in the server-side secret manager; never expose it to the frontend. |
 | `BUILT_IN_FORGE_API_URL` | Yes for the remaining storage adapter | Server-side Manus Forge service origin. | No longer used by the LLM adapter (replaced by `GEMINI_API_KEY`); still used by `server/storage.ts` until object storage is replaced. |
 | `BUILT_IN_FORGE_API_KEY` | Yes for the remaining storage adapter | Server-side Manus Forge credential. | No longer used by the LLM adapter (replaced by `GEMINI_API_KEY`); still used by `server/storage.ts` until object storage is replaced. |

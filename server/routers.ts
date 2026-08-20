@@ -11,12 +11,13 @@ import {
   extractedEvidence,
   targetRequirements,
 } from "../drizzle/schema";
-import { getDb, getTargetDocument, getWorkspace } from "./db";
+import { createUser, getDb, getTargetDocument, getUserByEmail, getWorkspace, touchUserLastSignedIn } from "./db";
 import { DEMO_LABEL, demoAssessments, demoContradictions, demoCurrentRole, demoCurrentRoleResponsibilities, demoDocuments, demoEvidence, demoObjectiveReports, demoProfile, demoRequirements, demoTarget } from "./demoData";
 import { analyseAnnualAppraisal, analyseJobEvaluation, AppraisalGenerationError, detectPlainTextConflicts, extractEvidenceItems, extractRequirements, locationForParagraph, mapEvidenceToRequirements, MappingDraft, paragraphize, parseEvidenceFile } from "./evidenceEngine";
 import { storagePut } from "./storage";
 import { COOKIE_NAME } from "@shared/const";
-import { getSessionCookieOptions } from "./_core/cookies";
+import { clearSessionCookie, createSession, destroySessionToken, hashPassword, sanitizeUser, setSessionCookie, verifyPassword } from "./_core/auth";
+import { parse as parseCookieHeader } from "cookie";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 
@@ -232,10 +233,38 @@ async function runAnalysisJob(
 export const appRouter = router({
   system: systemRouter,
   auth: router({
-    me: publicProcedure.query(opts => opts.ctx.user),
-    logout: publicProcedure.mutation(({ ctx }) => {
-      const cookieOptions = getSessionCookieOptions(ctx.req);
-      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+    me: publicProcedure.query(opts => (opts.ctx.user ? sanitizeUser(opts.ctx.user) : null)),
+    signup: publicProcedure.input(z.object({
+      email: z.string().trim().toLowerCase().email().max(320),
+      password: z.string().min(8).max(200),
+      name: z.string().trim().min(1).max(120).optional(),
+    })).mutation(async ({ ctx, input }) => {
+      const existing = await getUserByEmail(input.email);
+      if (existing) throw new TRPCError({ code: "CONFLICT", message: "An account with this email already exists." });
+      const passwordHash = await hashPassword(input.password);
+      const user = await createUser({ email: input.email, passwordHash, name: input.name ?? null });
+      const { token, expiresAt } = await createSession(user.id);
+      setSessionCookie(ctx.req, ctx.res, token, expiresAt);
+      return sanitizeUser(user);
+    }),
+    login: publicProcedure.input(z.object({
+      email: z.string().trim().toLowerCase().email().max(320),
+      password: z.string().min(1).max(200),
+    })).mutation(async ({ ctx, input }) => {
+      const invalidCredentials = new TRPCError({ code: "UNAUTHORIZED", message: "Incorrect email or password." });
+      const user = await getUserByEmail(input.email);
+      if (!user) throw invalidCredentials;
+      const valid = await verifyPassword(input.password, user.passwordHash);
+      if (!valid) throw invalidCredentials;
+      await touchUserLastSignedIn(user.id);
+      const { token, expiresAt } = await createSession(user.id);
+      setSessionCookie(ctx.req, ctx.res, token, expiresAt);
+      return sanitizeUser(user);
+    }),
+    logout: publicProcedure.mutation(async ({ ctx }) => {
+      const cookies = parseCookieHeader(ctx.req.headers.cookie ?? "");
+      await destroySessionToken(cookies[COOKIE_NAME]);
+      clearSessionCookie(ctx.req, ctx.res);
       return { success: true } as const;
     }),
   }),
