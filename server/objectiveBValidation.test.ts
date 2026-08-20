@@ -33,7 +33,7 @@ describe("Objective B validated report generation", () => {
     vi.mocked(invokeLLM).mockImplementationOnce(() => new Promise(() => undefined) as any);
     try {
       const appraisal = analyseAnnualAppraisal(evidence);
-      await vi.advanceTimersByTimeAsync(25_000);
+      await vi.advanceTimersByTimeAsync(45_000);
       await expect(appraisal).resolves.toMatchObject({ objective: "B", documentedAchievements: [{ evidenceIds: [1] }] });
     } finally {
       vi.useRealTimers();
@@ -67,7 +67,7 @@ describe("Objective B validated report generation", () => {
     response(JSON.stringify(validReport));
     await expect(analyseAnnualAppraisal(evidence)).resolves.toMatchObject({ objective: "B", documentedAchievements: [{ evidenceIds: [1] }] });
     expect(vi.mocked(invokeLLM)).toHaveBeenCalledTimes(2);
-    expect(vi.mocked(invokeLLM).mock.calls[1]?.[0]).toMatchObject({ model: "claude-haiku-4-5", response_format: { type: "text" }, maxTokens: 700 });
+    expect(vi.mocked(invokeLLM).mock.calls[1]?.[0]).toMatchObject({ model: "claude-haiku-4-5", response_format: { type: "json_schema" }, maxTokens: 1200 });
   });
 
   it("rejects missing appraisal sections and all-empty reports", async () => {
@@ -97,7 +97,7 @@ describe("Objective B validated report generation", () => {
     await analyseAnnualAppraisal(Array.from({ length: 140 }, (_, index) => ({ ...evidence[0], id: index + 1, statement: `Evidence ${index + 1}` })));
     expect(vi.mocked(invokeLLM)).toHaveBeenCalledWith(expect.objectContaining({ model: "claude-haiku-4-5" }));
     const invocation = vi.mocked(invokeLLM).mock.calls[0]?.[0] as any;
-    expect(invocation).toMatchObject({ model: "claude-haiku-4-5", response_format: { type: "text" }, maxTokens: 900 });
+    expect(invocation).toMatchObject({ model: "claude-haiku-4-5", response_format: { type: "json_schema" }, maxTokens: 1800 });
     expect(invocation.messages[1].content).toContain('"id":12');
     expect(invocation.messages[1].content).not.toContain('"id":13');
   });

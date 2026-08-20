@@ -210,7 +210,12 @@ export type ObjectiveReport = { objective: "A"; mappings: MappingDraft[] } | App
 const MAX_APPRAISAL_ITEMS = 24;
 const MAX_APPRAISAL_PRIMARY_ITEMS = 12;
 const MAX_APPRAISAL_FIELD_CHARS = 260;
-const APPRAISAL_ATTEMPT_TIMEOUT_MS = 25_000;
+// Objective B now runs inside a background job (see server/routers.ts
+// runAnalysisJob) rather than blocking an HTTP request, so this deadline no
+// longer has to protect against a platform/proxy timeout — it's raised from
+// the original 25s to give a real model call room to finish under normal
+// load before falling back to the source-only appraisal.
+const APPRAISAL_ATTEMPT_TIMEOUT_MS = 45_000;
 
 function selectAppraisalEvidence(evidence: EvidenceInput[]) {
   const ranked = [...evidence].sort((left, right) => Number(evidencePriority(right) === "explicit_qualification_or_cpd") - Number(evidencePriority(left) === "explicit_qualification_or_cpd"));
@@ -345,6 +350,43 @@ function strengthFor(assessment: EvidenceAssessmentStatus): MappingDraft["streng
   return "not_demonstrated";
 }
 
+// A single source-linked finding, shared by every Objective B section.
+const lensFindingJsonSchema = {
+  type: "object",
+  properties: {
+    title: { type: "string" },
+    statement: { type: "string" },
+    evidenceIds: { type: "array", items: { type: "integer" } },
+    qualification: { type: "string" },
+    action: { type: ["string", "null"] },
+  },
+  required: ["title", "statement", "evidenceIds", "qualification", "action"],
+  additionalProperties: false,
+};
+
+// Objective B originally asked the model to return raw-text JSON (with
+// fence/prose-stripping fallbacks in parseAppraisalJson below) rather than
+// using Anthropic's native structured-output support the way Objectives A
+// and C already do — that's a real reliability gap with an unconstrained
+// model and real (non-demo) evidence, since nothing guarantees the response
+// matches the required six-array shape. Using response_format: json_schema
+// here removes that failure mode; the manual validation below is kept as
+// defense in depth (it also enforces things a schema can't, like every
+// evidenceId referencing real supplied evidence).
+const appraisalResponseFormat = {
+  type: "json_schema" as const,
+  json_schema: {
+    name: "annual_appraisal_report",
+    strict: true,
+    schema: {
+      type: "object",
+      properties: Object.fromEntries(appraisalSections.map(key => [key, { type: "array", items: lensFindingJsonSchema }])),
+      required: [...appraisalSections],
+      additionalProperties: false,
+    },
+  },
+};
+
 export async function analyseAnnualAppraisal(evidence: EvidenceInput[]): Promise<AppraisalReport> {
   const compactEvidence = selectAppraisalEvidence(evidence)
     .slice(0, MAX_APPRAISAL_PRIMARY_ITEMS)
@@ -352,12 +394,12 @@ export async function analyseAnnualAppraisal(evidence: EvidenceInput[]): Promise
   try {
     const response = await invokeAppraisalWithinDeadline({
       model: APPRAISAL_MODEL,
-      maxTokens: 900,
+      maxTokens: 1800,
       messages: [
         { role: "system", content: "Create a concise, cautious annual appraisal report from supplied evidence only. Return only JSON with exactly six arrays: documentedAchievements, documentedImpact, evidenceLimitations, developmentThemes, evidenceGroundedObjectives, suggestedEvidenceToRetain. Include exactly one concise source-linked finding in each array. Every item must have title, statement, evidenceIds, qualification, and action. Do not use a wrapper, metadata, headings, markdown, prose, or alternative keys. Keep documented contribution, project-level outcome, and evidence limitation separate. Never invent citations, upgrade participation to ownership, or attribute a team outcome to one individual without explicit source support." },
         { role: "user", content: `Use only supplied evidence IDs. Do not infer absence from evidence that was not selected.\n\nEvidence:\n${JSON.stringify(compactEvidence)}` },
       ],
-      response_format: { type: "text" },
+      response_format: appraisalResponseFormat,
     });
     const parseAndValidate = (candidate: Awaited<ReturnType<typeof invokeLLM>>) => {
       if (candidate.choices[0]?.finish_reason === "length") throw new AppraisalGenerationError("truncated_response");
@@ -380,12 +422,12 @@ export async function analyseAnnualAppraisal(evidence: EvidenceInput[]): Promise
       try {
         const fallbackResponse = await invokeAppraisalWithinDeadline({
           model: APPRAISAL_MODEL,
-          maxTokens: 700,
+          maxTokens: 1200,
           messages: [
             { role: "system", content: "Return only JSON with exactly six arrays: documentedAchievements, documentedImpact, evidenceLimitations, developmentThemes, evidenceGroundedObjectives, suggestedEvidenceToRetain. Include exactly one concise finding in each array. Each finding must have title, statement, evidenceIds, qualification, and action. Do not use a wrapper, markdown, headings, metadata, or alternate keys. Use supplied evidence only and do not invent citations or ownership." },
             { role: "user", content: `Create a concise annual appraisal report from this representative source-linked evidence set. Use only listed IDs.\n\nEvidence:\n${JSON.stringify(compactEvidence.slice(0, 8))}` },
           ],
-          response_format: { type: "text" },
+          response_format: appraisalResponseFormat,
         });
         result = parseAndValidate(fallbackResponse);
       } catch {
@@ -415,6 +457,12 @@ export async function analyseJobEvaluation(responsibilities: FormalResponsibilit
     const response = await invokeLLM({
       model: MODEL,
       reasoning: { effort: "low" },
+      // Explicit and generous: a long real job specification can produce
+      // dozens of responsibility comparisons, and the default budget can
+      // truncate that output — a truncated response fails JSON.parse below
+      // and silently degrades to the generic fallback, which is what made a
+      // genuine failure here indistinguishable from "no evidence found".
+      maxTokens: 16000,
       messages: [
         { role: "system", content: "You prepare a cautious job-evaluation preparation report by comparing a supplied current/formal job description with separately supplied documented actual activity. This is not a promotion assessment and must never determine an NHS AfC band, entitlement, rebanding, pay, or legal position. For each formal responsibility choose only one neutral outcome: aligned, potentially_broader_responsibility, potentially_narrower_responsibility, insufficient_evidence, or unclear_ambiguous. Do not assume every difference is higher-level work. Never change facts, invent citations, upgrade participation to ownership, or attribute a team outcome to one individual without explicit support. Discussion questions must remain neutral. Return JSON only." },
         { role: "user", content: `Compare each current/formal role responsibility with documented actual activity. Return the documented activity, neutral alignment outcome, qualification, discussion point, and evidence needed. Then add neutral questions for discussion with a manager, HR, formal job-evaluation process, or professional representative. Use only supplied responsibility IDs and evidence IDs.\n\nCurrent/formal role responsibilities:\n${JSON.stringify(responsibilities)}\n\nDocumented actual activity:\n${JSON.stringify(compactEvidence)}` },
@@ -434,7 +482,11 @@ export async function analyseJobEvaluation(responsibilities: FormalResponsibilit
       if (responsibilities.some(responsibility => responsibility.responsibilityId === item.responsibilityId)) byResponsibility.set(item.responsibilityId, { ...item, evidenceIds: item.evidenceIds.filter(id => allowedEvidence.has(id)) });
     });
     return { objective: "C", comparisons: responsibilities.map(responsibility => byResponsibility.get(responsibility.responsibilityId) ?? fallback.comparisons.find(item => item.responsibilityId === responsibility.responsibilityId)!), questionsForDiscussion: Array.isArray(result?.questionsForDiscussion) ? result.questionsForDiscussion.map((item: LensFinding) => allowedFinding(item, allowedEvidence)) : [] };
-  } catch {
+  } catch (error) {
+    // This previously failed silently, which made a genuine generation
+    // failure indistinguishable from a legitimate "no evidence matched"
+    // result — log it so the two are diagnosable in server logs.
+    console.error("[Objective C] falling back to generic comparisons after generation failure", error);
     return fallback;
   }
 }
@@ -445,6 +497,10 @@ export async function mapEvidenceToRequirements(requirements: MappingInput[], ev
     const response = await invokeLLM({
       model: MODEL,
       reasoning: { effort: "low" },
+      // Explicit and generous: a long real target specification can produce
+      // dozens of requirements each decomposed into several components, and
+      // the default budget can truncate that output before it's valid JSON.
+      maxTokens: 16000,
       messages: [
         { role: "system", content: "You are a cautious professional-evidence assessor. Assess only supplied evidence. Decompose every multi-part requirement into substantive components that can be checked separately. The overall requirement is directly_evidenced only when every substantive component is directly supported by selected source passages. Use indirectly_relevantly_evidenced when a source is relevant but does not explicitly prove the stated component. Use inferred only when an interpretation is plausible but not directly demonstrated; make the inference explicit and never call it evidence. Use not_found only for absent meaningful source support, and contradicted only when a selected source explicitly conflicts with the component. General leadership is not senior support or role modelling. Initiating an idea is not formal policy development, approval, or policy leadership. Distinguish participation, contribution, implementation support, implementation leadership, and formal policy authority. When a requirement names groups or populations, assess each named population separately; do not use evidence about patients or staff to claim carers or external agencies. For CPD, qualifications, certificates, education, and training, prioritise supplied evidence marked explicit_qualification_or_cpd over general claims about learning, innovation, or interest. Never upgrade participation to ownership or leadership, and do not attribute a project outcome to one person without explicit source support. A missing citation must mean no selected evidence IDs. Return JSON only." },
         { role: "user", content: `Map each requirement to the supplied evidence. Return a component assessment for every substantive element of each requirement, then a cautious overall interpretation. Each component must have one of directly_evidenced, indirectly_relevantly_evidenced, inferred, not_found, or contradicted. Use only supplied evidence IDs. For a gap, say what documentary evidence is missing. For nextStep, recommend an evidence-building action and documentation to retain, not a claim of current experience.\n\nRequirements:\n${JSON.stringify(requirements)}\n\nEvidence:\n${JSON.stringify(compactEvidence)}` },
@@ -476,7 +532,11 @@ export async function mapEvidenceToRequirements(requirements: MappingInput[], ev
       }
     });
     return requirements.map(requirement => byId.get(requirement.requirementId) ?? ({ requirementId: requirement.requirementId, assessment: "not_found", strength: "not_demonstrated", evidenceIds: [], interpretation: "No supplied evidence was selected for this criterion.", gap: "The supplied documents do not currently demonstrate this criterion.", nextStep: "Build and retain source documentation that directly demonstrates this criterion.", components: [{ component: requirement.criterion, assessment: "not_found", evidenceIds: [], interpretation: "No supplied source passage directly demonstrates this criterion.", gap: "Retain a source record that directly addresses this criterion." }] }));
-  } catch {
+  } catch (error) {
+    // This previously failed silently, which made a genuine generation
+    // failure indistinguishable from a legitimate "not_found" result for
+    // every requirement — log it so the two are diagnosable in server logs.
+    console.error("[Objective A] falling back to generic mapping after generation failure", error);
     return requirements.map(requirement => ({ requirementId: requirement.requirementId, assessment: "not_found", strength: "not_demonstrated", evidenceIds: [], interpretation: "Automated mapping could not be completed. No conclusion has been inferred.", gap: "Review the source documents manually and add direct evidence where available.", nextStep: "Retain a dated record that directly demonstrates this criterion.", components: [{ component: requirement.criterion, assessment: "not_found", evidenceIds: [], interpretation: "No automated conclusion has been made.", gap: "Review the supplied source documents manually." }] }));
   }
 }
