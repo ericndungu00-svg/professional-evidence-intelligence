@@ -2,11 +2,29 @@ import "dotenv/config";
 import express from "express";
 import { createServer } from "http";
 import net from "net";
+import path from "path";
+import { migrate } from "drizzle-orm/mysql2/migrator";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
+import { getDb } from "../db";
 import { serveStatic, setupVite } from "./vite";
+
+async function runPendingMigrations() {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Migrate] DATABASE_URL not set — skipping migrations.");
+    return;
+  }
+  const migrationsFolder =
+    process.env.NODE_ENV === "development"
+      ? path.resolve(import.meta.dirname, "../..", "drizzle")
+      : path.resolve(import.meta.dirname, "..", "drizzle");
+  console.log("[Migrate] Applying pending database migrations...");
+  await migrate(db, { migrationsFolder });
+  console.log("[Migrate] Database schema is up to date.");
+}
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -28,6 +46,8 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 }
 
 async function startServer() {
+  await runPendingMigrations();
+
   const app = express();
   const server = createServer(app);
   // Configure body parser with larger size limit for file uploads
