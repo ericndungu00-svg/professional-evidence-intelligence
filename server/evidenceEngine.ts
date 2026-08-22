@@ -535,7 +535,7 @@ export async function mapEvidenceToRequirements(requirements: MappingInput[], ev
         const evidenceById = new Map(evidence.map(item => [item.id, item]));
         const components = Array.isArray(mapping.components) ? mapping.components.map(component => normalizeComponent(component, allowableIds, evidenceById)) : [];
         const mappedAssessment = overallAssessment(components, mapping.assessment);
-        byId.set(mapping.requirementId, { ...mapping, assessment: mappedAssessment, strength: strengthFor(mappedAssessment), evidenceIds: mapping.evidenceIds.filter(id => allowableIds.has(id)), components });
+        byId.set(mapping.requirementId, { ...mapping, assessment: mappedAssessment, strength: strengthFor(mappedAssessment), evidenceIds: (Array.isArray(mapping.evidenceIds) ? mapping.evidenceIds : []).filter(id => allowableIds.has(id)), components });
       }
     });
     return requirements.map(requirement => byId.get(requirement.requirementId) ?? ({ requirementId: requirement.requirementId, assessment: "not_found", strength: "not_demonstrated", evidenceIds: [], interpretation: "No supplied evidence was selected for this criterion.", gap: "The supplied documents do not currently demonstrate this criterion.", nextStep: "Build and retain source documentation that directly demonstrates this criterion.", components: [{ component: requirement.criterion, assessment: "not_found", evidenceIds: [], interpretation: "No supplied source passage directly demonstrates this criterion.", gap: "Retain a source record that directly addresses this criterion." }] }));

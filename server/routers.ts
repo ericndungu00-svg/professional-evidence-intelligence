@@ -321,6 +321,18 @@ export const appRouter = router({
       if (requirements.length) await db.insert(targetRequirements).values(requirements.map(item => ({ userId: ctx.user.id, targetDocumentId: documentId, category: item.category, criterion: item.criterion, sourceLocation: locationForParagraph(item.paragraphIndex, paragraphs), ordinal: item.ordinal })));
       return { documentId, criteriaCount: requirements.length, message: "Pasted target specification stored and prepared for analysis." };
     }),
+    pasteCurrentRole: protectedProcedure.input(z.object({
+      title: z.string().min(1).max(255), sourceKind: z.string().min(1).max(80), text: z.string().min(40).max(70_000),
+    })).mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "The evidence library is temporarily unavailable." });
+      const profile = (await getWorkspace(ctx.user.id)).profile;
+      const documentId = await persistDocument({ userId: ctx.user.id, profileId: profile?.id ?? null, title: input.title, fileName: "pasted-current-role.txt", mimeType: "text/plain", documentType: "current_role", sourceKind: input.sourceKind, extractedText: input.text.trim() });
+      const paragraphs = paragraphize(input.text);
+      const requirements = await extractRequirements(input.text);
+      if (requirements.length) await db.insert(targetRequirements).values(requirements.map(item => ({ userId: ctx.user.id, targetDocumentId: documentId, category: item.category, criterion: item.criterion, sourceLocation: locationForParagraph(item.paragraphIndex, paragraphs), ordinal: item.ordinal })));
+      return { documentId, criteriaCount: requirements.length, message: "Pasted current role stored and prepared for analysis." };
+    }),
     pasteEvidence: protectedProcedure.input(z.object({
       title: z.string().min(1).max(255), sourceKind: z.string().min(1).max(80), text: z.string().min(40).max(70_000),
     })).mutation(async ({ ctx, input }) => {
