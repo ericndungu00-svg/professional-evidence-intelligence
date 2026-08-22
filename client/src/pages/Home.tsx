@@ -194,11 +194,16 @@ export default function Home() {
     setAnalysisError(null);
     setAnalysisId(null);
     setObjective("A");
-    setActiveSection("evidence-map");
     if (!isAuthenticated) {
       setGuestWorkspace(null);
       setGuestJobId(null);
       setEntryDismissed(false);
+      setActiveSection("evidence-map");
+      toast.message("Back to the start.");
+    } else {
+      setEntryDismissed(true);
+      setActiveSection("library");
+      toast.message("Add new evidence or a new job description here, then pick what you'd like help with.");
     }
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
