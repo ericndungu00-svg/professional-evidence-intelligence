@@ -65,6 +65,12 @@ export const evidenceDocuments = mysqlTable("evidenceDocuments", {
   extractedText: mediumtext("extractedText").notNull(),
   extractionStatus: mysqlEnum("extractionStatus", ["ready", "needs_review", "failed"]).default("ready").notNull(),
   isDemo: mysqlEnum("isDemo", ["yes", "no"]).default("no").notNull(),
+  // Soft delete: a removed document is excluded from future workspace reads
+  // (see getWorkspace/getTargetDocument) but the row -- and every past
+  // analysis, criterionAssessment, and evidenceContradiction that already
+  // references it -- is left untouched, so deleting a document can never
+  // corrupt a previously-generated report that cited it.
+  deletedAt: timestamp("deletedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 

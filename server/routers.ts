@@ -11,7 +11,7 @@ import {
   extractedEvidence,
   targetRequirements,
 } from "../drizzle/schema";
-import { createUser, getDb, getTargetDocument, getUserByEmail, getWorkspace, touchUserLastSignedIn } from "./db";
+import { createUser, getDb, getTargetDocument, getUserByEmail, getWorkspace, softDeleteDocument, touchUserLastSignedIn } from "./db";
 import { DEMO_LABEL, demoAssessments, demoContradictions, demoCurrentRole, demoCurrentRoleResponsibilities, demoDocuments, demoEvidence, demoObjectiveReports, demoProfile, demoRequirements, demoTarget } from "./demoData";
 import { analyseAnnualAppraisal, analyseJobEvaluation, AppraisalGenerationError, detectPlainTextConflicts, extractEvidenceItems, extractRequirements, locationForParagraph, mapEvidenceToRequirements, MappingDraft, paragraphize, parseEvidenceFile } from "./evidenceEngine";
 import { storagePut } from "./storage";
@@ -332,6 +332,11 @@ export const appRouter = router({
       const items = await extractEvidenceItems(input.text);
       if (items.length) await db.insert(extractedEvidence).values(items.map(item => ({ userId: ctx.user.id, documentId, statement: item.statement, excerpt: item.excerpt, sourceLocation: locationForParagraph(item.paragraphIndex, paragraphs), category: item.category, evidenceType: item.evidenceType, outcome: item.outcome, confidence: item.confidence })));
       return { documentId, itemCount: items.length, message: "Pasted evidence stored and prepared for analysis." };
+    }),
+    deleteDocument: protectedProcedure.input(z.object({ documentId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      const removed = await softDeleteDocument(ctx.user.id, input.documentId);
+      if (!removed) throw new TRPCError({ code: "NOT_FOUND", message: "This document was not found in your library." });
+      return { documentId: input.documentId, message: "Document removed from your library." };
     }),
     upload: protectedProcedure.input(z.object({
       title: z.string().min(1).max(255), fileName: z.string().min(1).max(255), mimeType: z.string().min(1).max(150), documentType: z.enum(["evidence", "target", "current_role"]), sourceKind: z.string().min(1).max(80), dataBase64: z.string().min(1).max(15_000_000), sourceText: z.string().max(70_000).optional(),

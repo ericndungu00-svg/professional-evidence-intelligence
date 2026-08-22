@@ -39,10 +39,21 @@ export function getSessionCookieOptions(
   //       ? hostname
   //       : undefined;
 
+  // SameSite=None requires Secure -- modern browsers silently reject any
+  // cookie that sets one without the other (RFC 6265bis). This app is never
+  // embedded cross-origin any more (the Manus-preview-iframe code this was
+  // written for is gone), so there's no reason to force None: use it only
+  // when the request is genuinely HTTPS (so Secure is true and the pairing
+  // is valid), and fall back to Lax -- which never needs Secure -- for a
+  // plain-HTTP request such as local development. Without this, a real
+  // browser over http://localhost never stores the session cookie at all,
+  // even though curl (which doesn't enforce this policy) appears to work
+  // fine, silently masking the bug in any curl-based testing.
+  const secure = isSecureRequest(req);
   return {
     httpOnly: true,
     path: "/",
-    sameSite: "none",
-    secure: isSecureRequest(req),
+    sameSite: secure ? "none" : "lax",
+    secure,
   };
 }

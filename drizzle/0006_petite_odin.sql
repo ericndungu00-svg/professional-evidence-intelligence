@@ -1,0 +1,1 @@
+ALTER TABLE `evidenceDocuments` ADD `deletedAt` timestamp;

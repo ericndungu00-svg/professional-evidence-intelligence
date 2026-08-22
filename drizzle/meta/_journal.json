@@ -43,6 +43,13 @@
       "when": 1787239289990,
       "tag": "0005_portable_fresh_schema",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1787364219607,
+      "tag": "0006_petite_odin",
+      "breakpoints": true
     }
   ]
 }

@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   criterionAssessments,
@@ -76,9 +76,17 @@ export async function getWorkspace(userId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database is unavailable.");
   const [profile] = await db.select().from(evidenceProfiles).where(eq(evidenceProfiles.userId, userId)).limit(1);
-  const documents = await db.select().from(evidenceDocuments).where(eq(evidenceDocuments.userId, userId)).orderBy(desc(evidenceDocuments.createdAt));
-  const requirements = await db.select().from(targetRequirements).where(eq(targetRequirements.userId, userId)).orderBy(targetRequirements.ordinal);
-  const evidence = await db.select().from(extractedEvidence).where(eq(extractedEvidence.userId, userId)).orderBy(desc(extractedEvidence.createdAt));
+  const documents = await db.select().from(evidenceDocuments).where(and(eq(evidenceDocuments.userId, userId), isNull(evidenceDocuments.deletedAt))).orderBy(desc(evidenceDocuments.createdAt));
+  // Deleted documents are excluded above, then their requirements/evidence
+  // are excluded here too -- filtered in JS against the live document set
+  // rather than deleted at the row level, so a past analysis that already
+  // cited them (evidenceAnalyses/criterionAssessments/evidenceContradictions,
+  // none of which are touched by a delete) keeps working exactly as before.
+  const liveDocumentIds = new Set(documents.map(document => document.id));
+  const allRequirements = await db.select().from(targetRequirements).where(eq(targetRequirements.userId, userId)).orderBy(targetRequirements.ordinal);
+  const requirements = allRequirements.filter(item => liveDocumentIds.has(item.targetDocumentId));
+  const allEvidence = await db.select().from(extractedEvidence).where(eq(extractedEvidence.userId, userId)).orderBy(desc(extractedEvidence.createdAt));
+  const evidence = allEvidence.filter(item => liveDocumentIds.has(item.documentId));
   const analyses = await db.select().from(evidenceAnalyses).where(eq(evidenceAnalyses.userId, userId)).orderBy(desc(evidenceAnalyses.createdAt));
   const latestAnalysis = analyses[0];
   const assessments = latestAnalysis ? await db.select().from(criterionAssessments).where(eq(criterionAssessments.analysisId, latestAnalysis.id)) : [];
@@ -95,8 +103,20 @@ export async function getWorkspace(userId: number) {
 export async function getTargetDocument(userId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database is unavailable.");
-  const result = await db.select().from(evidenceDocuments).where(and(eq(evidenceDocuments.userId, userId), eq(evidenceDocuments.documentType, "target"))).orderBy(desc(evidenceDocuments.createdAt)).limit(1);
+  const result = await db.select().from(evidenceDocuments).where(and(eq(evidenceDocuments.userId, userId), eq(evidenceDocuments.documentType, "target"), isNull(evidenceDocuments.deletedAt))).orderBy(desc(evidenceDocuments.createdAt)).limit(1);
   return result[0] ?? null;
+}
+
+// Soft delete only -- see the deletedAt comment on evidenceDocuments in
+// drizzle/schema.ts. Returns false if the document doesn't exist, isn't
+// owned by this user, or was already deleted (idempotent either way).
+export async function softDeleteDocument(userId: number, documentId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is unavailable.");
+  const [existing] = await db.select({ id: evidenceDocuments.id }).from(evidenceDocuments).where(and(eq(evidenceDocuments.id, documentId), eq(evidenceDocuments.userId, userId), isNull(evidenceDocuments.deletedAt))).limit(1);
+  if (!existing) return false;
+  await db.update(evidenceDocuments).set({ deletedAt: new Date() }).where(and(eq(evidenceDocuments.id, documentId), eq(evidenceDocuments.userId, userId)));
+  return true;
 }
 
 export async function getDocumentById(userId: number, id: number) {
