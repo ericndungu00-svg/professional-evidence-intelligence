@@ -4,46 +4,26 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* Canvas & content surfaces -- warm ivory workspace, white for the
-     surfaces that carry the most important content (results, source
-     excerpts), never the other way round. */
-  --background: #F7F5F0;
-  --foreground: #17212B;
-  --card: #FFFFFF;
-  --card-foreground: #17212B;
-  --popover: #FFFFFF;
-  --popover-foreground: #17212B;
-
-  /* Brand -- the four colours the whole system is built from. Used
-     strategically (see --accent / --ring below), never as large fills. */
-  --ink: #102A43;
-  --petrol: #155E63;
-  --emerald: #2F8F83;
-  --amber: #C98A32;
-  --stone: #EEECE6;
-
-  /* shadcn semantic slots, mapped onto the brand palette */
-  --primary: #102A43;
-  --primary-foreground: #F7F5F0;
-  --secondary: #EEECE6;
-  --secondary-foreground: #17212B;
-  --muted: #F1EFE9;
-  --muted-foreground: #64717D;
-  --accent: #EAF1EF;
-  --accent-foreground: #155E63;
-  --destructive: #B85C5C;
-  --destructive-foreground: #FFFFFF;
-  --border: #E4E0D7;
-  --input: #E4E0D7;
-  --ring: #155E63;
-
-  /* Status -- amber for caveats/uncertainty, muted green/red for the
-     rest, never a bright/saturated warning colour. */
-  --success: #3D8B70;
-  --caution: #B7791F;
-  --error: #B85C5C;
-
-  --radius: 0.5rem;
+  --background: oklch(0.978 0.005 100);
+  --foreground: oklch(0.23 0.025 252);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.23 0.025 252);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.23 0.025 252);
+  --primary: oklch(0.34 0.067 242);
+  --primary-foreground: oklch(0.985 0.002 100);
+  --secondary: oklch(0.948 0.012 160);
+  --secondary-foreground: oklch(0.28 0.045 158);
+  --muted: oklch(0.955 0.006 100);
+  --muted-foreground: oklch(0.49 0.02 252);
+  --accent: oklch(0.93 0.024 92);
+  --accent-foreground: oklch(0.27 0.04 75);
+  --destructive: oklch(0.55 0.18 25);
+  --destructive-foreground: oklch(0.985 0.002 100);
+  --border: oklch(0.885 0.012 100);
+  --input: oklch(0.885 0.012 100);
+  --ring: oklch(0.44 0.07 242);
+  --radius: 0.75rem;
 }
 
 @theme inline {
@@ -66,14 +46,6 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --color-ink: var(--ink);
-  --color-petrol: var(--petrol);
-  --color-emerald: var(--emerald);
-  --color-amber: var(--amber);
-  --color-stone: var(--stone);
-  --color-success: var(--success);
-  --color-caution: var(--caution);
-  --color-error: var(--error);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -85,32 +57,9 @@
 
 * { border-color: var(--border); }
 html { scroll-behavior: smooth; }
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: "Manrope", sans-serif;
-  /* An almost imperceptible warm tonal wash instead of a grid -- gives the
-     canvas some depth without reading as a template background. */
-  background-image: radial-gradient(ellipse 1400px 900px at 12% -10%, oklch(0.97 0.014 85 / 55%), transparent 60%), radial-gradient(ellipse 1200px 800px at 100% 0%, oklch(0.95 0.02 190 / 35%), transparent 55%);
-  background-attachment: fixed;
-}
+body { background: var(--background); color: var(--foreground); font-family: "Manrope", sans-serif; }
 button, input, textarea, select { font: inherit; }
-
-/* Evidence-status system: a coloured rule + dot rather than a filled
-   badge blob, so status reads as part of an evidence report, not a UI
-   chip. Colour is carried mainly by the dot and the left rule; text
-   stays close to ink so a page of these doesn't turn into a colour wall. */
-.status-pill { display: inline-flex; align-items: center; gap: .5rem; padding: .3rem .65rem .3rem .55rem; border-radius: 999px; border: 1px solid var(--stone); background: #fff; font-size: .72rem; font-weight: 600; letter-spacing: .01em; white-space: nowrap; }
-.status-pill .status-dot { width: .5rem; height: .5rem; border-radius: 999px; flex-shrink: 0; }
-.evidence-row { border-left: 3px solid var(--border); }
-
-/* Source-reference pattern -- CLAIM -> SOURCE -> VERIFICATION is the
-   product's signature trust mechanic, so it gets its own visual
-   language rather than looking like an ordinary text link. */
-.source-ref { display: inline-flex; align-items: center; gap: .6rem; text-align: left; border-radius: .5rem; padding: .5rem .35rem; margin: -.5rem -.35rem; transition: background-color .15s ease; }
-.source-ref:hover { background: var(--accent); }
-.source-ref .source-index { font-family: "DM Mono", monospace; font-size: .62rem; font-weight: 500; letter-spacing: .1em; color: var(--petrol); border: 1px solid color-mix(in oklch, var(--petrol) 30%, transparent); border-radius: .3rem; padding: .1rem .35rem; }
-
-.report-table tbody tr { border-top: 1px solid var(--border); }
-.report-table tbody tr:hover { background: var(--muted); }
-@media (prefers-reduced-motion: no-preference) { .rise { animation: rise .4s cubic-bezier(0.16, 1, 0.3, 1) both; } @keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } } }
+.paper-grid { background-image: linear-gradient(to right, oklch(0.9 0.008 100 / 45%) 1px, transparent 1px), linear-gradient(to bottom, oklch(0.9 0.008 100 / 45%) 1px, transparent 1px); background-size: 28px 28px; }
+.report-table tbody tr { border-top: 1px solid oklch(0.91 0.01 100); }
+.report-table tbody tr:hover { background: oklch(0.975 0.008 100); }
+@media (prefers-reduced-motion: no-preference) { .rise { animation: rise .35s cubic-bezier(0.23, 1, 0.32, 1) both; } @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } } }
