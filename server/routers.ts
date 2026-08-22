@@ -21,7 +21,7 @@ import { parse as parseCookieHeader } from "cookie";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 
-const disclaimer = "This tool analyses supplied professional evidence and provides decision support only. It does not determine NHS AfC banding, employment eligibility, legal rights, job-evaluation outcomes, or professional competence.";
+const disclaimer = "This tool analyses supplied professional evidence and provides decision support only. It does not determine employment eligibility, banding/grading decisions, legal rights, job-evaluation outcomes, or professional competence for any profession.";
 const objectiveSchema = z.enum(["A", "B", "C"]);
 const guestAnalysisSchema = z.object({
   currentRole: z.string().min(2).max(255).optional(),
@@ -49,7 +49,7 @@ function buildSummary(objective: "A" | "B" | "C", assessments: { assessment: str
   const contradicted = assessments.filter(item => item.assessment === "contradicted" || item.assessment === "unsupported").length;
   if (objective === "A") return `Objective A — promotion and target role mapping. The evidence map records ${direct} directly evidenced criteria, ${relevant} indirectly or relevantly evidenced criteria, ${inferred} inference-only findings, ${notFound} criteria not found in the supplied library, and ${contradicted} contradicted criteria. This is evidence coverage, not a readiness score or employment decision.`;
   if (objective === "B") return `Objective B — annual appraisal summary. The supplied documents contain ${direct} directly evidenced areas. Development attention should focus on the ${relevant + inferred + notFound + contradicted} criteria that are relevant only, inferred, absent, or contradicted in the current library. Proposed objectives are evidence-building actions, not claims about current performance.`;
-  return `Objective C — job evaluation preparation. The analysis identifies documented areas for discussion only. It does not determine an NHS AfC band, job-evaluation outcome, contractual entitlement, or legal position. Any divergence should be considered through the appropriate formal process.`;
+  return `Objective C — job evaluation preparation. The analysis identifies documented areas for discussion only. It does not determine a banding/grading decision, job-evaluation outcome, contractual entitlement, or legal position. Any divergence should be considered through the appropriate formal process.`;
 }
 
 function buildObjectiveSummary(objective: "A" | "B" | "C", report: any, mappings: { assessment: string; strength: string; gap: string; nextStep: string | null }[]) {
@@ -60,7 +60,7 @@ function buildObjectiveSummary(objective: "A" | "B" | "C", report: any, mappings
   const narrower = report.comparisons.filter((item: any) => item.alignment === "potentially_narrower_responsibility").length;
   const insufficient = report.comparisons.filter((item: any) => item.alignment === "insufficient_evidence").length;
   const unclear = report.comparisons.filter((item: any) => item.alignment === "unclear_ambiguous").length;
-  return `Objective C — job evaluation preparation. The report compares ${report.comparisons.length} current-role responsibilities with documented actual activities: ${aligned} aligned, ${broader} potentially broader, ${narrower} potentially narrower, ${insufficient} with insufficient evidence, and ${unclear} unclear or ambiguous. It is for discussion only and does not determine NHS AfC banding, rebanding, entitlement, pay, or legal position.`;
+  return `Objective C — job evaluation preparation. The report compares ${report.comparisons.length} current-role responsibilities with documented actual activities: ${aligned} aligned, ${broader} potentially broader, ${narrower} potentially narrower, ${insufficient} with insufficient evidence, and ${unclear} unclear or ambiguous. It is for discussion only and does not determine a banding/grading decision, entitlement, pay, or legal position.`;
 }
 
 async function persistDocument(args: {
