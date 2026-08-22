@@ -64,9 +64,7 @@ export default function Home() {
   const [uploadDraft, setUploadDraft] = useState({ title: "", documentType: "evidence" as "evidence" | "target" | "current_role", sourceKind: "CV", sourceText: "" });
   const [uploadFile, setUploadFile] = useState<File | null>(null);
 
-  const active: any = isAuthenticated
-    ? (workspaceQuery.data?.profile ? workspaceQuery.data : demoQuery.data)
-    : (guestWorkspace ?? demoQuery.data);
+  const active: any = isAuthenticated ? workspaceQuery.data : (guestWorkspace ?? demoQuery.data);
   const isGuest = !!guestWorkspace?.isGuest;
   const isDemo = !isGuest && (!isAuthenticated || active?.profile?.isDemo === "yes" || active?.isDemo);
   const isFirstLoad = !entryDismissed && !isGuest && (!isAuthenticated || !(workspaceQuery.data?.documents?.length));
