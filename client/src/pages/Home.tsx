@@ -261,6 +261,33 @@ export default function Home() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  // The raw logout() from useAuth only clears server-side session state --
+  // it has no knowledge of this component's local UI state. entryDismissed
+  // in particular stays true from the prior authenticated session (it's set
+  // true the moment any signed-in user gets past the entry screen), so
+  // isFirstLoad evaluates false immediately after signing out and the real
+  // logged-out landing screen never renders. Instead the app falls through
+  // to the normal shell with `active` resolving to the shared demo dataset
+  // (guestWorkspace is null, isAuthenticated is now false), showing Sarah's
+  // example content in place of the entry screen. Confirmed live: "New
+  // analysis" doesn't have this problem because goHome's unauthenticated
+  // branch already resets entryDismissed -- signing out needs the same
+  // reset, applied before the async logout so there's no render in between
+  // where isAuthenticated is already false but entryDismissed is still
+  // stale-true.
+  async function handleSignOut() {
+    setSelectedEvidenceId(null);
+    setAnalysisError(null);
+    setAnalysisId(null);
+    setObjective("A");
+    setGuestWorkspace(null);
+    setGuestJobId(null);
+    setEntryDismissed(false);
+    setActiveSection("evidence-map");
+    setDashboardDismissed(true);
+    await logout();
+  }
+
   // isFirstLoad below treats a missing workspaceQuery.data as "no documents
   // yet" -- correct once the query has actually resolved, but on every
   // fresh page load workspaceQuery.data is briefly undefined while it's
@@ -276,7 +303,7 @@ export default function Home() {
         <div className="mx-auto flex max-w-[1540px] items-center justify-between gap-4 px-5 py-3 lg:px-8">
           <button type="button" onClick={goHome} className="flex min-w-0 items-center gap-3 text-left"><span className="grid size-9 place-items-center rounded-md bg-primary text-primary-foreground"><SearchCheck className="size-5" /></span><span className="min-w-0"><span className="block text-[11px] font-bold uppercase tracking-[0.2em] text-primary">Evidence review</span><span className="hidden truncate font-serif text-lg font-semibold leading-5 sm:block">See what your CV actually proves</span></span></button>
           <div className="hidden items-center gap-5 text-xs text-muted-foreground md:flex"><span>Only uses what's in your documents</span><span className="h-3 w-px bg-border" /><span>We never make things up</span></div>
-          <div className="flex items-center gap-2"><Button variant="ghost" size="sm" onClick={goHome} className="hidden sm:inline-flex">New analysis</Button>{isDemo && <Badge variant="outline" className="hidden border-amber-300 bg-amber-50 text-amber-800 sm:flex">Example only</Badge>}{isGuest && <Badge variant="outline" className="hidden border-primary/30 bg-primary/5 text-primary sm:flex">Not saved yet</Badge>}{isAuthenticated ? <><span className="hidden text-sm font-medium lg:inline">{user?.name}</span><Button variant="outline" size="sm" onClick={logout}>Sign out</Button></> : <Button size="sm" onClick={() => setAuthOpen(true)}><span className="sm:hidden">Sign in</span><span className="hidden sm:inline">Sign in to save your results</span></Button>}</div>
+          <div className="flex items-center gap-2"><Button variant="ghost" size="sm" onClick={goHome} className="hidden sm:inline-flex">New analysis</Button>{isDemo && <Badge variant="outline" className="hidden border-amber-300 bg-amber-50 text-amber-800 sm:flex">Example only</Badge>}{isGuest && <Badge variant="outline" className="hidden border-primary/30 bg-primary/5 text-primary sm:flex">Not saved yet</Badge>}{isAuthenticated ? <><span className="hidden text-sm font-medium lg:inline">{user?.name}</span><Button variant="outline" size="sm" onClick={handleSignOut}>Sign out</Button></> : <Button size="sm" onClick={() => setAuthOpen(true)}><span className="sm:hidden">Sign in</span><span className="hidden sm:inline">Sign in to save your results</span></Button>}</div>
         </div>
       </header>
 
