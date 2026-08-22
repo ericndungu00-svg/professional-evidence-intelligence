@@ -91,8 +91,28 @@ export async function getWorkspace(userId: number) {
   const latestAnalysis = analyses[0];
   const assessments = latestAnalysis ? await db.select().from(criterionAssessments).where(eq(criterionAssessments.analysisId, latestAnalysis.id)) : [];
   const contradictions = latestAnalysis ? await db.select().from(evidenceContradictions).where(eq(evidenceContradictions.analysisId, latestAnalysis.id)) : [];
+  // objectiveReport is declared as a json() column, but on at least one
+  // deployed database it was actually created as longtext (schema drift
+  // between the drizzle-kit migration history and the live column type) --
+  // mysql2 only auto-parses columns MySQL itself reports as JSON, so on a
+  // drifted column the driver hands back the raw JSON text instead of a
+  // parsed object. Confirmed live: Objective A masked this (it also reads
+  // from the separate criterionAssessments table as a fallback), but
+  // Objective B/C have no such fallback, so their results screens silently
+  // rendered as empty/not-yet-run even though generation had succeeded.
+  // Parse defensively here so a real object reaches the client either way.
   const objectiveReports = analyses.reduce<Record<string, unknown>>((reports, analysis) => {
-    if (!(analysis.objective in reports) && analysis.objectiveReport) reports[analysis.objective] = analysis.objectiveReport;
+    if (analysis.objective in reports || !analysis.objectiveReport) return reports;
+    const report = analysis.objectiveReport;
+    if (typeof report === "string") {
+      try {
+        reports[analysis.objective] = JSON.parse(report);
+      } catch {
+        // Leave this objective's report absent rather than surfacing unparsable text.
+      }
+    } else {
+      reports[analysis.objective] = report;
+    }
     return reports;
   }, {});
   const currentRoleDocument = documents.find(document => document.documentType === "current_role") ?? null;
