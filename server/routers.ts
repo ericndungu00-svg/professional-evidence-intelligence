@@ -351,12 +351,27 @@ export const appRouter = router({
       return { documentId: input.documentId, message: "Document removed from your library." };
     }),
     upload: protectedProcedure.input(z.object({
-      title: z.string().min(1).max(255), fileName: z.string().min(1).max(255), mimeType: z.string().min(1).max(150), documentType: z.enum(["evidence", "target", "current_role"]), sourceKind: z.string().min(1).max(80), dataBase64: z.string().min(1).max(15_000_000), sourceText: z.string().max(70_000).optional(),
+      // dataBase64's max is deliberately well above the 10MB app limit
+      // (base64 expands raw bytes by ~4/3) -- confirmed live: a tighter zod
+      // max meant an over-limit upload could fail zod's own raw validation
+      // error instead of the friendly "Files must be 10 MB or smaller"
+      // message below. This bound just needs to be comfortably under
+      // Express's own body-size limit (50mb); the byte-length check is what
+      // actually enforces the real 10MB rule.
+      title: z.string().min(1).max(255), fileName: z.string().min(1).max(255), mimeType: z.string().min(1).max(150), documentType: z.enum(["evidence", "target", "current_role"]), sourceKind: z.string().min(1).max(80), dataBase64: z.string().min(1).max(21_000_000), sourceText: z.string().max(70_000).optional(),
     })).mutation(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "The evidence library is temporarily unavailable." });
       const bytes = Buffer.from(input.dataBase64, "base64");
-      if (!bytes.length || bytes.length > 10 * 1024 * 1024) throw new TRPCError({ code: "PAYLOAD_TOO_LARGE", message: "Files must be 10 MB or smaller for this MVP." });
+      if (!bytes.length || bytes.length > 10 * 1024 * 1024) throw new TRPCError({ code: "PAYLOAD_TOO_LARGE", message: "Files must be 10 MB or smaller." });
+      // File uploads are PDF/DOCX only for now (paste-entry remains the way
+      // to bring in any other text). Checked before storagePut is ever
+      // called so a rejected file never reaches R2 and this path works
+      // (and is testable) even without storage configured.
+      const lowerFileName = input.fileName.toLowerCase();
+      const isPdf = input.mimeType === "application/pdf" || lowerFileName.endsWith(".pdf");
+      const isDocx = input.mimeType.includes("wordprocessingml") || lowerFileName.endsWith(".docx");
+      if (!isPdf && !isDocx) throw new TRPCError({ code: "BAD_REQUEST", message: "We can only accept PDF or DOCX files right now. Please upload one of those, or paste the text in below instead." });
       const profile = (await getWorkspace(ctx.user.id)).profile;
       const stored = await storagePut(`evidence/${ctx.user.id}/${Date.now()}_${sanitizeName(input.fileName)}`, bytes, input.mimeType);
       const parsed = input.sourceText?.trim() ? { text: input.sourceText.trim(), status: "ready" as const } : await parseEvidenceFile(input.fileName, input.mimeType, bytes);

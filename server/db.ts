@@ -84,6 +84,11 @@ export async function getWorkspace(userId: number) {
   // none of which are touched by a delete) keeps working exactly as before.
   const liveDocumentIds = new Set(documents.map(document => document.id));
   const currentRoleDocument = documents.find(document => document.documentType === "current_role") ?? null;
+  // documents is already ordered most-recent-first, so this is the same
+  // "current" target document getTargetDocument() picks for the actual
+  // Objective A analysis run -- see the requirements comment below for why
+  // that match matters.
+  const targetDocument = documents.find(document => document.documentType === "target") ?? null;
   const allRequirements = await db.select().from(targetRequirements).where(eq(targetRequirements.userId, userId)).orderBy(targetRequirements.ordinal);
   // targetRequirements holds both target-job criteria and current-role
   // responsibilities, distinguished only by which document's id is used as
@@ -94,7 +99,17 @@ export async function getWorkspace(userId: number) {
   // this, current-role responsibilities showed up as extra "Not Found" rows
   // in Objective A's gap analysis, inflating apparent gaps in a job
   // application with criteria that were never part of the job spec.
-  const requirements = allRequirements.filter(item => liveDocumentIds.has(item.targetDocumentId) && item.targetDocumentId !== currentRoleDocument?.id);
+  //
+  // A user can end up with more than one live target-type document (e.g.
+  // after loading the demo example and later adding their own, or pasting
+  // an updated job spec without deleting the old one) -- runAnalysis only
+  // ever assesses the single most recent one (getTargetDocument), so
+  // requirements is scoped to that same document here too. Confirmed live:
+  // without this, Objective A's results counted every requirement from
+  // every target document ever added, not just the one actually analysed,
+  // showing dozens of spurious "Not Found" rows for a job spec that was
+  // never the one being checked against.
+  const requirements = targetDocument ? allRequirements.filter(item => liveDocumentIds.has(item.targetDocumentId) && item.targetDocumentId === targetDocument.id) : [];
   const allEvidence = await db.select().from(extractedEvidence).where(eq(extractedEvidence.userId, userId)).orderBy(desc(extractedEvidence.createdAt));
   const evidence = allEvidence.filter(item => liveDocumentIds.has(item.documentId));
   const analyses = await db.select().from(evidenceAnalyses).where(eq(evidenceAnalyses.userId, userId)).orderBy(desc(evidenceAnalyses.createdAt));
@@ -126,7 +141,7 @@ export async function getWorkspace(userId: number) {
     return reports;
   }, {});
   const currentRoleResponsibilities = currentRoleDocument ? allRequirements.filter(item => item.targetDocumentId === currentRoleDocument.id) : [];
-  return { profile: profile ?? null, documents, requirements, currentRoleDocument, currentRoleResponsibilities, evidence, analyses, latestAnalysis: latestAnalysis ?? null, assessments, contradictions, objectiveReports };
+  return { profile: profile ?? null, documents, requirements, targetDocument, currentRoleDocument, currentRoleResponsibilities, evidence, analyses, latestAnalysis: latestAnalysis ?? null, assessments, contradictions, objectiveReports };
 }
 
 export async function getTargetDocument(userId: number) {
