@@ -11,8 +11,9 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { AuthDialog } from "@/components/AuthDialog";
+import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { trpc } from "@/lib/trpc";
-import { AlertTriangle, ArrowRight, BookOpenText, CheckCircle2, ChevronRight, CircleAlert, FileText, FolderOpen, Landmark, Loader2, LockKeyhole, Plus, Scale, SearchCheck, ShieldCheck, Sparkles, Target, Trash2, Upload, X } from "lucide-react";
+import { AlertTriangle, ArrowRight, BookOpenText, CheckCircle2, ChevronRight, CircleAlert, FileText, FolderOpen, Landmark, Loader2, LockKeyhole, Menu, Plus, Scale, SearchCheck, ShieldCheck, Sparkles, Target, Trash2, Upload, X } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -77,6 +78,7 @@ export default function Home() {
   const [uploadOpen, setUploadOpen] = useState(false);
   const [guestOpen, setGuestOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [guestWorkspace, setGuestWorkspace] = useState<any>(null);
   const [entryDismissed, setEntryDismissed] = useState(false);
   // Starts dismissed: the dashboard should greet a genuine returning user
@@ -252,6 +254,19 @@ export default function Home() {
 
   function chooseObjective(next: Objective) { setObjective(next); setActiveSection(next === "A" ? "evidence-map" : "objective-summary"); }
 
+  // Single shared path to "My documents" / "My results" / "How this works",
+  // used by both the persistent global top bar/hamburger menu and the
+  // in-workspace contextual sidebar below -- one implementation, not two
+  // that could drift apart. Dismissing entry/dashboard is a no-op when
+  // neither is showing (e.g. a click from inside the sidebar), so this is
+  // safe to call unconditionally from either caller.
+  function navigateTo(section: string) {
+    setEntryDismissed(true);
+    setDashboardDismissed(true);
+    setActiveSection(section);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
   // Always-available way back to the start. For a signed-in user this is
   // pure navigation -- their evidence library is never cleared by this
   // (nothing here is destructive; see runAnalysis/pasteEvidence/pasteTarget,
@@ -321,10 +336,53 @@ export default function Home() {
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
       <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur">
-        <div className="mx-auto flex max-w-[1540px] items-center justify-between gap-4 px-5 py-3 lg:px-8">
-          <button type="button" onClick={goHome} className="flex min-w-0 items-center gap-3 text-left"><span className="grid size-9 place-items-center rounded-md bg-primary text-primary-foreground"><SearchCheck className="size-5" /></span><span className="min-w-0"><span className="block text-[11px] font-bold uppercase tracking-[0.2em] text-primary">Evidence review</span><span className="hidden truncate font-serif text-lg font-semibold leading-5 sm:block">See what your CV actually proves</span></span></button>
-          <div className="hidden items-center gap-5 text-xs text-muted-foreground lg:flex"><span>Only uses what's in your documents</span><span className="h-3 w-px bg-border" /><span>We never make things up</span></div>
-          <div className="flex items-center gap-2"><Button variant="ghost" size="sm" onClick={goHome} className="hidden font-semibold hover:text-accent-foreground sm:inline-flex">New analysis</Button>{isDemo && <Badge variant="outline" className="hidden border-amber-300 bg-amber-50 text-amber-800 sm:flex">Example only</Badge>}{isGuest && <Badge variant="outline" className="hidden border-primary/30 bg-primary/5 text-primary sm:flex">Not saved yet</Badge>}{isAuthenticated ? <><span className="hidden text-sm font-medium lg:inline">{user?.name}</span><Button variant="outline" size="sm" onClick={handleSignOut}>Sign out</Button></> : <Button size="sm" onClick={() => setAuthOpen(true)}><span className="sm:hidden">Sign in</span><span className="hidden sm:inline">Sign in to save your results</span></Button>}</div>
+        <div className="mx-auto flex max-w-[1540px] items-center justify-between gap-3 px-5 py-3 lg:px-8">
+          <button type="button" onClick={goHome} className="flex min-w-0 items-center gap-3 text-left"><span className="grid size-9 shrink-0 place-items-center rounded-md bg-primary text-primary-foreground"><SearchCheck className="size-5" /></span><span className="min-w-0"><span className="block text-[11px] font-bold uppercase tracking-[0.2em] text-primary">Evidence review</span><span className="hidden truncate font-serif text-lg font-semibold leading-5 sm:block">See what your CV actually proves</span></span></button>
+
+          {/* Persistent global nav, desktop (>=768px): identical on every screen. */}
+          <nav aria-label="Global" className="hidden items-center gap-1 md:flex">
+            <HeaderNavLink label="New analysis" onClick={goHome} />
+            <HeaderNavLink label="My documents" active={activeSection === "library" && !isFirstLoad && !showDashboard} onClick={() => navigateTo("library")} />
+            <HeaderNavLink label="My results" active={activeSection === "objective-summary" && !isFirstLoad && !showDashboard} onClick={() => navigateTo("objective-summary")} />
+            <HeaderNavLink label="How this works" active={activeSection === "safety" && !isFirstLoad && !showDashboard} onClick={() => navigateTo("safety")} />
+          </nav>
+
+          <div className="flex items-center gap-2">
+            {isDemo && <Badge variant="outline" className="hidden border-amber-300 bg-amber-50 text-amber-800 sm:flex">Example only</Badge>}
+            {isGuest && <Badge variant="outline" className="hidden border-primary/30 bg-primary/5 text-primary sm:flex">Not saved yet</Badge>}
+            {isAuthenticated ? <>
+              <span className="hidden text-sm font-medium lg:inline">{user?.name}</span>
+              <Button variant="outline" size="sm" onClick={handleSignOut} className="hidden md:inline-flex">Sign out</Button>
+            </> : <Button size="sm" onClick={() => setAuthOpen(true)} className="hidden md:inline-flex">Sign in to save your results</Button>}
+
+            {/* Mobile (<768px): hamburger opens the same five items -- the direct fix for "New analysis" being unreachable on mobile. */}
+            <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
+              <SheetTrigger asChild>
+                <Button variant="outline" size="icon" className="md:hidden" aria-label="Open menu"><Menu className="size-5" /></Button>
+              </SheetTrigger>
+              <SheetContent side="right" className="flex w-[300px] flex-col gap-0 p-0">
+                <SheetHeader className="border-b">
+                  <SheetTitle className="font-serif text-lg">Evidence review</SheetTitle>
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {isDemo && <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-800">Example only</Badge>}
+                    {isGuest && <Badge variant="outline" className="border-primary/30 bg-primary/5 text-primary">Not saved yet</Badge>}
+                  </div>
+                </SheetHeader>
+                <nav aria-label="Global" className="flex flex-1 flex-col gap-1 p-3">
+                  <MobileNavLink label="New analysis" icon={Sparkles} onClick={() => { goHome(); setMobileNavOpen(false); }} />
+                  <MobileNavLink label="My documents" icon={FolderOpen} active={activeSection === "library" && !isFirstLoad && !showDashboard} onClick={() => { navigateTo("library"); setMobileNavOpen(false); }} />
+                  <MobileNavLink label="My results" icon={BookOpenText} active={activeSection === "objective-summary" && !isFirstLoad && !showDashboard} onClick={() => { navigateTo("objective-summary"); setMobileNavOpen(false); }} />
+                  <MobileNavLink label="How this works" icon={ShieldCheck} active={activeSection === "safety" && !isFirstLoad && !showDashboard} onClick={() => { navigateTo("safety"); setMobileNavOpen(false); }} />
+                </nav>
+                <SheetFooter className="border-t">
+                  {isAuthenticated ? <>
+                    {user?.name && <p className="px-1 text-sm font-medium text-muted-foreground">{user.name}</p>}
+                    <Button variant="outline" onClick={() => { setMobileNavOpen(false); handleSignOut(); }}>Sign out</Button>
+                  </> : <Button onClick={() => { setMobileNavOpen(false); setAuthOpen(true); }}>Sign in to save your results</Button>}
+                </SheetFooter>
+              </SheetContent>
+            </Sheet>
+          </div>
         </div>
       </header>
 
@@ -358,7 +416,7 @@ export default function Home() {
         </section>
 
         <div className="mt-6 grid gap-6 xl:grid-cols-[240px_minmax(0,1fr)]">
-          <aside className="xl:sticky xl:top-24 xl:h-fit"><nav className="rounded-xl border bg-card p-2 shadow-sm"><NavButton active={activeSection === "evidence-map"} icon={SearchCheck} label="Your strengths and gaps" onClick={() => setActiveSection("evidence-map")} /><NavButton active={activeSection === "library"} icon={FolderOpen} label="My documents" onClick={() => setActiveSection("library")} /><NavButton active={activeSection === "objective-summary"} icon={BookOpenText} label="My results" onClick={() => setActiveSection("objective-summary")} /><NavButton active={activeSection === "safety"} icon={ShieldCheck} label="How this works" onClick={() => setActiveSection("safety")} /></nav><div className="mt-4 rounded-xl border border-dashed bg-card p-4"><p className="font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">What you're working on</p><p className="mt-1 font-serif text-lg font-semibold">{objectives[objective].title}</p><p className="mt-1 text-xs leading-5 text-muted-foreground">{objectives[objective].label}</p></div></aside>
+          <aside className="xl:sticky xl:top-24 xl:h-fit"><nav className="rounded-xl border bg-card p-2 shadow-sm"><NavButton active={activeSection === "evidence-map"} icon={SearchCheck} label="Your strengths and gaps" onClick={() => setActiveSection("evidence-map")} /><NavButton active={activeSection === "library"} icon={FolderOpen} label="My documents" onClick={() => navigateTo("library")} /><NavButton active={activeSection === "objective-summary"} icon={BookOpenText} label="My results" onClick={() => navigateTo("objective-summary")} /><NavButton active={activeSection === "safety"} icon={ShieldCheck} label="How this works" onClick={() => navigateTo("safety")} /></nav><div className="mt-4 rounded-xl border border-dashed bg-card p-4"><p className="font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">What you're working on</p><p className="mt-1 font-serif text-lg font-semibold">{objectives[objective].title}</p><p className="mt-1 text-xs leading-5 text-muted-foreground">{objectives[objective].label}</p></div></aside>
 
           <div className="min-w-0">
             <section className="rise rounded-xl border bg-card p-5 shadow-sm lg:p-6"><div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"><div><p className="font-mono text-[11px] font-bold uppercase tracking-[0.16em] text-primary">Pick one</p><h2 className="mt-1 font-serif text-3xl font-semibold">What do you want help with?</h2><p className="mt-1 text-xs text-muted-foreground">Try it free, right now — no account needed. Sign in only if you want to save your results for later.</p></div><Button onClick={() => { setAnalysisError(null); if (isAuthenticated) runAnalysis.mutate({ objective }); else setGuestOpen(true); }} disabled={isAuthenticated && isAnalysing} className="shrink-0">{(isAuthenticated && isAnalysing) ? <Loader2 className="animate-spin" /> : <Sparkles />}{isAuthenticated ? "Check my evidence" : <>Check my evidence<span className="hidden sm:inline"> — no sign-in needed</span></>}</Button></div><div className="mt-5 grid gap-3 lg:grid-cols-3">{(Object.keys(objectives) as Objective[]).map(key => { const item = objectives[key]; const Icon = item.icon; const tint = objectiveIconTint[key]; return <button key={key} onClick={() => chooseObjective(key)} className={`rounded-lg border p-4 text-left shadow-sm ring-1 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${objective === key ? "border-primary bg-primary/[.035] ring-primary/20" : "bg-card ring-primary/0 hover:border-primary/40"}`}><div className="flex items-center justify-between"><span className={`grid size-8 place-items-center rounded-full ${tint.bg} ${tint.fg}`}><Icon className="size-4" /></span><span className="font-mono text-[11px] font-bold uppercase tracking-[.14em] text-muted-foreground">{item.label}</span></div><p className="mt-4 font-semibold">{item.title}</p><p className="mt-1 text-xs leading-5 text-muted-foreground">{item.description}</p></button>; })}</div></section>
@@ -383,6 +441,15 @@ export default function Home() {
 }
 
 function NavButton({ active, icon: Icon, label, onClick }: { active: boolean; icon: typeof Target; label: string; onClick: () => void }) { return <button onClick={onClick} className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors ${active ? "bg-primary text-primary-foreground" : "text-foreground/75 hover:bg-accent hover:text-accent-foreground"}`}><Icon className="size-4" />{label}<ChevronRight className={`ml-auto size-4 ${active ? "opacity-100" : "opacity-0"}`} /></button>; }
+
+// The persistent global top bar's desktop link (>=768px).
+function HeaderNavLink({ label, active, onClick }: { label: string; active?: boolean; onClick: () => void }) { return <button type="button" onClick={onClick} className={`rounded-md px-3 py-2 text-sm font-semibold transition-colors ${active ? "bg-primary/10 text-primary" : "text-foreground/75 hover:text-accent-foreground"}`}>{label}</button>; }
+
+// The persistent global nav's mobile hamburger-menu link (<768px). Larger
+// tap target than HeaderNavLink -- this is the direct fix for "New
+// analysis" being unreachable on mobile, so it needs to be unmistakably
+// visible and easy to tap, not a scaled-down desktop link.
+function MobileNavLink({ label, icon: Icon, active, onClick }: { label: string; icon: typeof Target; active?: boolean; onClick: () => void }) { return <button type="button" onClick={onClick} className={`flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-base font-medium transition-colors ${active ? "bg-primary text-primary-foreground" : "text-foreground/80 hover:bg-accent hover:text-accent-foreground"}`}><Icon className="size-4.5" />{label}</button>; }
 
 function FirstLoadEntry({ onStart, onExploreDemo }: { onStart: () => void; onExploreDemo: () => void }) {
   return <section className="grid gap-5 lg:grid-cols-[minmax(0,1.65fr)_minmax(300px,.75fr)]"><div className="relative overflow-hidden rounded-2xl bg-primary px-7 py-9 text-primary-foreground shadow-[0_18px_45px_-24px_rgba(14,32,50,.65)] lg:px-10 lg:py-12"><div className="absolute -right-20 -top-24 size-72 rounded-full border border-white/15" /><div className="absolute -bottom-24 right-24 size-52 rounded-full border border-white/10" /><div className="relative max-w-2xl"><p className="font-mono text-[11px] font-bold uppercase tracking-[.18em] text-white/70">Get started</p><h1 className="mt-4 font-serif text-4xl font-semibold leading-[1.04] tracking-tight sm:text-5xl">See what your CV actually proves.</h1><p className="mt-4 max-w-xl text-base leading-7 text-white/80">Paste in your CV (or anything else — an appraisal, feedback, a certificate) and the job description you're aiming for. We'll show you exactly what matches, right here, no account needed.</p><div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center"><Button size="lg" onClick={onStart} className="bg-white px-6 text-primary shadow-sm hover:bg-white/90"><Sparkles className="size-4" />Start now — it's free</Button><span className="text-sm text-white/70">Takes about 5 minutes</span></div><div className="mt-8 grid gap-3 border-t border-white/15 pt-5 sm:grid-cols-3"><EntryStep number="01" label="Paste in your evidence" /><EntryStep number="02" label="Paste in the job description" /><EntryStep number="03" label="See exactly what matches" /></div></div></div><aside className="rounded-2xl border bg-card p-6 shadow-sm"><Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-800">Example only</Badge><h2 className="mt-4 font-serif text-2xl font-semibold">Prefer to look first?</h2><p className="mt-3 text-sm leading-6 text-muted-foreground">Take a look at Sarah's example — a made-up Grade 6 specialist advisor going for Grade 7. It shows you what your results would look like, using made-up data.</p><Button variant="outline" className="mt-6 w-full justify-between" onClick={onExploreDemo}>See the example <ArrowRight className="size-4" /></Button><p className="mt-4 text-xs leading-5 text-muted-foreground">You can start your own review any time — the example is just there if you want to see it first.</p></aside></section>;
