@@ -83,8 +83,18 @@ export async function getWorkspace(userId: number) {
   // cited them (evidenceAnalyses/criterionAssessments/evidenceContradictions,
   // none of which are touched by a delete) keeps working exactly as before.
   const liveDocumentIds = new Set(documents.map(document => document.id));
+  const currentRoleDocument = documents.find(document => document.documentType === "current_role") ?? null;
   const allRequirements = await db.select().from(targetRequirements).where(eq(targetRequirements.userId, userId)).orderBy(targetRequirements.ordinal);
-  const requirements = allRequirements.filter(item => liveDocumentIds.has(item.targetDocumentId));
+  // targetRequirements holds both target-job criteria and current-role
+  // responsibilities, distinguished only by which document's id is used as
+  // targetDocumentId -- "requirements" means job/promotion criteria to every
+  // consumer (Objective A's evidence map and its "N things we'll check
+  // against" count, the results summary bar), so current-role rows are
+  // excluded here rather than at each call site. Confirmed live: without
+  // this, current-role responsibilities showed up as extra "Not Found" rows
+  // in Objective A's gap analysis, inflating apparent gaps in a job
+  // application with criteria that were never part of the job spec.
+  const requirements = allRequirements.filter(item => liveDocumentIds.has(item.targetDocumentId) && item.targetDocumentId !== currentRoleDocument?.id);
   const allEvidence = await db.select().from(extractedEvidence).where(eq(extractedEvidence.userId, userId)).orderBy(desc(extractedEvidence.createdAt));
   const evidence = allEvidence.filter(item => liveDocumentIds.has(item.documentId));
   const analyses = await db.select().from(evidenceAnalyses).where(eq(evidenceAnalyses.userId, userId)).orderBy(desc(evidenceAnalyses.createdAt));
@@ -115,8 +125,7 @@ export async function getWorkspace(userId: number) {
     }
     return reports;
   }, {});
-  const currentRoleDocument = documents.find(document => document.documentType === "current_role") ?? null;
-  const currentRoleResponsibilities = currentRoleDocument ? requirements.filter(item => item.targetDocumentId === currentRoleDocument.id) : [];
+  const currentRoleResponsibilities = currentRoleDocument ? allRequirements.filter(item => item.targetDocumentId === currentRoleDocument.id) : [];
   return { profile: profile ?? null, documents, requirements, currentRoleDocument, currentRoleResponsibilities, evidence, analyses, latestAnalysis: latestAnalysis ?? null, assessments, contradictions, objectiveReports };
 }
 

@@ -261,7 +261,14 @@ export default function Home() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  if (authLoading || demoQuery.isLoading) return <div className="min-h-screen grid place-items-center"><Loader2 className="size-7 animate-spin text-primary" /></div>;
+  // isFirstLoad below treats a missing workspaceQuery.data as "no documents
+  // yet" -- correct once the query has actually resolved, but on every
+  // fresh page load workspaceQuery.data is briefly undefined while it's
+  // still in flight. Without waiting for it here too, a returning,
+  // authenticated user with a real library would flash the guest-oriented
+  // entry screen (including "Start now", which opens the unsaved guest
+  // flow) until their real data arrived and the view self-corrected.
+  if (authLoading || demoQuery.isLoading || (isAuthenticated && workspaceQuery.isLoading)) return <div className="min-h-screen grid place-items-center"><Loader2 className="size-7 animate-spin text-primary" /></div>;
 
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
@@ -276,7 +283,28 @@ export default function Home() {
       <main id="top" className="mx-auto w-full max-w-[1540px] flex-1 px-5 pb-10 pt-6 lg:px-8">
         <div className="mb-6 flex items-start gap-3 rounded-lg border border-primary/15 bg-secondary/55 px-4 py-3 text-sm text-secondary-foreground"><ShieldCheck className="mt-0.5 size-5 shrink-0" /><p><strong>Decision support, not a determination.</strong> This tool analyses supplied professional evidence only. It does not determine employment eligibility, banding/grading decisions, legal rights, job-evaluation outcomes, or professional competence for any profession.</p></div>
 
-        {isFirstLoad ? <FirstLoadEntry onStart={() => setGuestOpen(true)} onExploreDemo={() => setEntryDismissed(true)} /> : showDashboard ? <ReturningUserDashboard workspace={active} onChooseObjective={(next: Objective) => { setDashboardDismissed(true); chooseObjective(next); }} onViewLibrary={() => { setDashboardDismissed(true); setActiveSection("library"); }} /> : <><section className="paper-grid relative overflow-hidden rounded-xl border bg-card px-6 py-8 shadow-[0_12px_36px_-26px_rgba(14,32,50,.35)] lg:px-10">
+        {isFirstLoad ? <FirstLoadEntry onStart={() => {
+          // Belt-and-suspenders alongside the loading-gate fix above: if an
+          // authenticated user with an existing library ever reaches this
+          // screen, send them to their real workspace instead of the
+          // guest-only paste flow, which doesn't save anything for them and
+          // has no connection to their existing documents. A guest, or a
+          // genuinely new signed-in user with nothing saved yet, keeps the
+          // original quick-start behaviour exactly as before.
+          if (isAuthenticated && (workspaceQuery.data?.documents?.length ?? 0) > 0) { setEntryDismissed(true); setDashboardDismissed(false); return; }
+          setGuestOpen(true);
+        }} onExploreDemo={() => {
+          // For a guest, dismissing the entry screen is enough -- `active`
+          // already falls back to the shared demo dataset. For a signed-in
+          // user `active` is always their own real workspace, so dismissing
+          // the entry screen alone left them looking at their own empty
+          // account under a button that promised Sarah's example. loadDemo
+          // is a no-op once a real document exists, so it's safe to call
+          // unconditionally here -- isFirstLoad guarantees the library is
+          // still empty at this point.
+          if (isAuthenticated) loadDemo.mutate();
+          setEntryDismissed(true);
+        }} /> : showDashboard ? <ReturningUserDashboard workspace={active} onChooseObjective={(next: Objective) => { setDashboardDismissed(true); chooseObjective(next); }} onViewLibrary={() => { setDashboardDismissed(true); setActiveSection("library"); }} /> : <><section className="paper-grid relative overflow-hidden rounded-xl border bg-card px-6 py-8 shadow-[0_12px_36px_-26px_rgba(14,32,50,.35)] lg:px-10">
           <div className="relative max-w-4xl"><div className="mb-3 flex items-center gap-2"><span className="font-mono text-[11px] uppercase tracking-[0.14em] text-primary">About you</span>{isDemo && <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-800">Example data</Badge>}{isGuest && <Badge variant="outline" className="border-primary/30 bg-primary/5 text-primary">Not saved</Badge>}</div><h1 className="font-serif text-3xl font-semibold tracking-tight lg:text-4xl">{active?.profile?.currentRole ?? "Tell us about yourself"}</h1><p className="mt-2 max-w-3xl text-base text-muted-foreground">{active?.profile ? `${active.profile.profession}${active.profile.specialty ? ` · ${active.profile.specialty}` : ""}${active.profile.experience ? ` · ${active.profile.experience}` : ""}` : "Try it free, right now — no account needed. Sign in only if you want to save your results for later."}</p><div className="mt-5 flex flex-wrap gap-2">{active?.profile?.targetRole && <Badge variant="secondary" className="font-medium">Aiming for: {active.profile.targetRole}</Badge>}{active?.profile?.currentLevel && <Badge variant="outline">Current level: {active.profile.currentLevel}</Badge>}{isDemo && <Badge variant="outline">Sarah Mwangi</Badge>}</div></div>
           <div className="relative mt-6 flex flex-wrap items-center gap-1.5">{[{ label: "About you", active: !!active?.profile }, { label: "Evidence", active: (active?.documents?.filter((document: any) => document.documentType === "evidence")?.length ?? 0) > 0 }, { label: "Job you want", active: !!target }, { label: "Results", active: (active?.assessments?.length ?? 0) > 0 }].map((step, index) => <span key={step.label} className="flex items-center gap-1.5">{index > 0 && <span className="h-px w-4 shrink-0 bg-border sm:w-8" />}<span className="flex items-center gap-1.5 text-xs"><span className={`grid size-4 shrink-0 place-items-center rounded-full text-[8px] font-bold ${step.active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>{step.active ? <CheckCircle2 className="size-2.5" /> : index + 1}</span><span className={step.active ? "font-medium text-foreground" : "text-muted-foreground"}>{step.label}</span></span></span>)}</div>
         </section>
