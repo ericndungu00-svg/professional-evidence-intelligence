@@ -64,7 +64,9 @@ export default function Home() {
   const [uploadDraft, setUploadDraft] = useState({ title: "", documentType: "evidence" as "evidence" | "target" | "current_role", sourceKind: "CV", sourceText: "" });
   const [uploadFile, setUploadFile] = useState<File | null>(null);
 
-  const active: any = guestWorkspace ?? (isAuthenticated && workspaceQuery.data?.profile ? workspaceQuery.data : demoQuery.data);
+  const active: any = isAuthenticated
+    ? (workspaceQuery.data?.profile ? workspaceQuery.data : demoQuery.data)
+    : (guestWorkspace ?? demoQuery.data);
   const isGuest = !!guestWorkspace?.isGuest;
   const isDemo = !isGuest && (!isAuthenticated || active?.profile?.isDemo === "yes" || active?.isDemo);
   const isFirstLoad = !entryDismissed && !isGuest && (!isAuthenticated || !(workspaceQuery.data?.documents?.length));
@@ -145,6 +147,14 @@ export default function Home() {
   }, [guestAnalysisStatusQuery.data]);
   const isAnalysing = runAnalysis.isPending || analysisId !== null;
   const isGuestAnalysing = guestAnalysis.isPending || guestJobId !== null;
+
+  // Once signed in, the authenticated evidence library is the source of
+  // truth; leftover guest-mode state (from a guest analysis run earlier in
+  // the same tab) must not keep shadowing it, or the UI shows stale guest
+  // results and the "Guest session" badge even while logged in.
+  useEffect(() => {
+    if (isAuthenticated && guestWorkspace) { setGuestWorkspace(null); setGuestJobId(null); }
+  }, [isAuthenticated, guestWorkspace]);
 
   const ensureAuth = () => { if (!isAuthenticated) { toast.message("Sign in to save evidence to your private library."); setAuthOpen(true); return false; } return true; };
 
