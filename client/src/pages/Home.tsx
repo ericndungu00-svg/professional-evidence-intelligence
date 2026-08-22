@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { AuthDialog } from "@/components/AuthDialog";
 import { trpc } from "@/lib/trpc";
 import { AlertTriangle, ArrowRight, BookOpenText, CheckCircle2, ChevronRight, CircleAlert, FileText, FolderOpen, Landmark, Loader2, LockKeyhole, Plus, Scale, SearchCheck, ShieldCheck, Sparkles, Target, Trash2, Upload, X } from "lucide-react";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 type Objective = "A" | "B" | "C";
@@ -58,6 +58,13 @@ export default function Home() {
   const [authOpen, setAuthOpen] = useState(false);
   const [guestWorkspace, setGuestWorkspace] = useState<any>(null);
   const [entryDismissed, setEntryDismissed] = useState(false);
+  // Starts dismissed: the dashboard should greet a genuine returning user
+  // (one whose library already had documents when the page loaded), not
+  // reactively interrupt someone mid-task the moment they add their very
+  // first document -- see the effect below, which decides this exactly
+  // once per page load rather than on every document-count change.
+  const [dashboardDismissed, setDashboardDismissed] = useState(true);
+  const dashboardCheckedRef = useRef(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [analysisId, setAnalysisId] = useState<number | null>(null);
   const [guestJobId, setGuestJobId] = useState<string | null>(null);
@@ -69,6 +76,11 @@ export default function Home() {
   const isGuest = !!guestWorkspace?.isGuest;
   const isDemo = !isGuest && (!isAuthenticated || active?.profile?.isDemo === "yes" || active?.isDemo);
   const isFirstLoad = !entryDismissed && !isGuest && (!isAuthenticated || !(workspaceQuery.data?.documents?.length));
+  // A returning signed-in user (an existing library, not their first visit)
+  // lands on a dashboard first rather than straight into an objective --
+  // guest mode is untouched, and a brand-new signed-in user with no
+  // documents yet still gets isFirstLoad's entry screen instead.
+  const showDashboard = isAuthenticated && !isGuest && !dashboardDismissed && !isFirstLoad && (workspaceQuery.data?.documents?.length ?? 0) > 0;
   const target = useMemo(() => active?.targetDocument ?? active?.documents?.find((document: any) => document.documentType === "target"), [active]);
   const assessmentByRequirement = useMemo(() => new Map<number, any>((active?.objectiveReports?.A?.mappings ?? active?.assessments ?? []).map((assessment: any): [number, any] => [assessment.requirementId, assessment])), [active]);
   const selectedSource = selectedEvidenceId ? sourceFor(active, selectedEvidenceId) : null;
@@ -161,6 +173,18 @@ export default function Home() {
     if (isAuthenticated && guestWorkspace) { setGuestWorkspace(null); setGuestJobId(null); }
   }, [isAuthenticated, guestWorkspace]);
 
+  // Show the dashboard exactly once per page load, and only if this was
+  // already a returning user with an existing library at that point --
+  // deciding this reactively on every document-count change would pop the
+  // dashboard up mid-task the moment someone added their very first
+  // document. Explicit "Home" clicks (goHome) are a separate, always-on
+  // path and aren't gated by this ref.
+  useEffect(() => {
+    if (dashboardCheckedRef.current || !isAuthenticated || isGuest || !workspaceQuery.data) return;
+    dashboardCheckedRef.current = true;
+    if ((workspaceQuery.data.documents?.length ?? 0) > 0) setDashboardDismissed(false);
+  }, [isAuthenticated, isGuest, workspaceQuery.data]);
+
   const ensureAuth = () => { if (!isAuthenticated) { toast.message("Sign in to save this to your library."); setAuthOpen(true); return false; } return true; };
 
   async function handleProfile(event: FormEvent) {
@@ -207,8 +231,13 @@ export default function Home() {
       toast.message("Back to the start.");
     } else {
       setEntryDismissed(true);
-      setActiveSection("library");
-      toast.message("Add new evidence or a new job description here, then pick what you'd like help with.");
+      if ((workspaceQuery.data?.documents?.length ?? 0) > 0) {
+        setDashboardDismissed(false);
+        toast.message("Back to your dashboard.");
+      } else {
+        setActiveSection("library");
+        toast.message("Add new evidence or a new job description here, then pick what you'd like help with.");
+      }
     }
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -228,7 +257,7 @@ export default function Home() {
       <main id="top" className="mx-auto max-w-[1540px] px-5 pb-28 pt-6 lg:px-8">
         <div className="mb-6 flex items-start gap-3 rounded-lg border border-primary/15 bg-secondary/55 px-4 py-3 text-sm text-secondary-foreground"><ShieldCheck className="mt-0.5 size-5 shrink-0" /><p><strong>Decision support, not a determination.</strong> This tool analyses supplied professional evidence only. It does not determine employment eligibility, banding/grading decisions, legal rights, job-evaluation outcomes, or professional competence for any profession.</p></div>
 
-        {isFirstLoad ? <FirstLoadEntry onStart={() => setGuestOpen(true)} onExploreDemo={() => setEntryDismissed(true)} /> : <><section className="paper-grid relative overflow-hidden rounded-xl border bg-card px-6 py-8 shadow-[0_12px_36px_-26px_rgba(14,32,50,.35)] lg:px-10">
+        {isFirstLoad ? <FirstLoadEntry onStart={() => setGuestOpen(true)} onExploreDemo={() => setEntryDismissed(true)} /> : showDashboard ? <ReturningUserDashboard workspace={active} onChooseObjective={(next: Objective) => { setDashboardDismissed(true); chooseObjective(next); }} onViewLibrary={() => { setDashboardDismissed(true); setActiveSection("library"); }} /> : <><section className="paper-grid relative overflow-hidden rounded-xl border bg-card px-6 py-8 shadow-[0_12px_36px_-26px_rgba(14,32,50,.35)] lg:px-10">
           <div className="relative max-w-4xl"><div className="mb-3 flex items-center gap-2"><span className="font-mono text-[11px] uppercase tracking-[0.14em] text-primary">About you</span>{isDemo && <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-800">Example data</Badge>}{isGuest && <Badge variant="outline" className="border-primary/30 bg-primary/5 text-primary">Not saved</Badge>}</div><h1 className="font-serif text-3xl font-semibold tracking-tight lg:text-4xl">{active?.profile?.currentRole ?? "Tell us about yourself"}</h1><p className="mt-2 max-w-3xl text-base text-muted-foreground">{active?.profile ? `${active.profile.profession}${active.profile.specialty ? ` · ${active.profile.specialty}` : ""}${active.profile.experience ? ` · ${active.profile.experience}` : ""}` : "Try it free, right now — no account needed. Sign in only if you want to save your results for later."}</p><div className="mt-5 flex flex-wrap gap-2">{active?.profile?.targetRole && <Badge variant="secondary" className="font-medium">Aiming for: {active.profile.targetRole}</Badge>}{active?.profile?.currentLevel && <Badge variant="outline">Current level: {active.profile.currentLevel}</Badge>}{isDemo && <Badge variant="outline">Sarah Mwangi</Badge>}</div></div>
           <div className="relative mt-7 grid gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-4"><Step number="01" label="About you" active={!!active?.profile} /><Step number="02" label="Evidence" active={(active?.documents?.filter((document: any) => document.documentType === "evidence")?.length ?? 0) > 0} /><Step number="03" label="Job you want" active={!!target} /><Step number="04" label="Results" active={(active?.assessments?.length ?? 0) > 0} /></div>
         </section>
@@ -265,6 +294,28 @@ function FirstLoadEntry({ onStart, onExploreDemo }: { onStart: () => void; onExp
 }
 function EntryStep({ number, label }: { number: string; label: string }) { return <div className="flex items-center gap-2 text-xs leading-4 text-white/80"><span className="grid size-6 shrink-0 place-items-center rounded-full border border-white/30 font-mono text-[10px] font-bold text-white">{number}</span>{label}</div>; }
 
+function ReturningUserDashboard({ workspace, onChooseObjective, onViewLibrary }: { workspace: any; onChooseObjective: (objective: Objective) => void; onViewLibrary: () => void }) {
+  const documentCount = workspace?.documents?.length ?? 0;
+  const evidenceCount = (workspace?.documents ?? []).filter((document: any) => document.documentType === "evidence").length;
+  const lastAnalysis = workspace?.latestAnalysis;
+  const lastAnalysisDate = lastAnalysis?.createdAt ? new Date(lastAnalysis.createdAt).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" }) : null;
+  return <section className="grid gap-5 rise">
+    <div className="rounded-2xl border bg-card px-6 py-8 shadow-sm lg:px-10">
+      <p className="font-mono text-[11px] font-bold uppercase tracking-[.18em] text-primary">Welcome back</p>
+      <h1 className="mt-3 font-serif text-3xl font-semibold tracking-tight lg:text-4xl">{workspace?.profile?.currentRole ?? "Your evidence library"}</h1>
+      <p className="mt-3 max-w-2xl text-base leading-7 text-muted-foreground">
+        {evidenceCount ? `${evidenceCount} evidence document${evidenceCount === 1 ? "" : "s"}` : "No evidence documents"} in your library
+        {lastAnalysisDate ? `, last checked on ${lastAnalysisDate}${lastAnalysis?.objective ? ` (${objectives[lastAnalysis.objective as Objective].title})` : ""}.` : " — you haven't run a check yet."}
+      </p>
+      <Button variant="outline" className="mt-5" onClick={onViewLibrary}><FolderOpen className="size-4" />View my documents ({documentCount})</Button>
+    </div>
+    <div>
+      <p className="mb-3 font-mono text-[10px] font-bold uppercase tracking-[.16em] text-muted-foreground">Jump back in</p>
+      <div className="grid gap-3 lg:grid-cols-3">{(Object.keys(objectives) as Objective[]).map(key => { const item = objectives[key]; const Icon = item.icon; return <button key={key} onClick={() => onChooseObjective(key)} className="rounded-lg border bg-card p-4 text-left transition-all duration-150 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm"><div className="flex items-center justify-between"><span className="grid size-8 place-items-center rounded-md bg-secondary text-secondary-foreground"><Icon className="size-4" /></span><span className="font-mono text-[10px] font-bold uppercase tracking-[.14em] text-muted-foreground">{item.label}</span></div><p className="mt-4 font-semibold">{item.title}</p><p className="mt-1 text-xs leading-5 text-muted-foreground">{item.description}</p></button>; })}</div>
+    </div>
+  </section>;
+}
+
 function ComponentChecks({ active, components, selectedEvidenceId, setSelectedEvidenceId }: any) {
   if (!components?.length) return null;
   return <div className="mt-3 space-y-2 border-t border-dashed pt-3"><p className="font-mono text-[10px] font-bold uppercase tracking-[.12em] text-muted-foreground">In detail</p>{components.map((component: any, index: number) => <div key={`${component.component}-${index}`} className="rounded-md bg-muted/35 p-2.5"><div className="flex flex-wrap items-center gap-2"><Badge variant="outline" className={assessmentStyle[canonicalAssessment(component.assessment)]}>{formatStatus(canonicalAssessment(component.assessment))}</Badge><span className="text-xs font-semibold">{component.component}</span></div><p className="mt-1 text-xs leading-5 text-muted-foreground">{component.interpretation}</p>{component.gap && <p className="mt-1 text-xs leading-5 text-amber-800"><strong>Limitation:</strong> {component.gap}</p>}{component.evidenceIds?.length ? <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">{component.evidenceIds.map((id: number) => { const source = sourceFor(active, id); return source.evidence ? <button key={id} onClick={() => setSelectedEvidenceId(id)} className={`text-xs font-semibold text-primary underline underline-offset-4 ${selectedEvidenceId === id ? "opacity-60" : ""}`}>View source: {source.document?.title ?? "evidence"}</button> : null; })}</div> : <p className="mt-2 text-xs text-muted-foreground">We haven't linked a specific quote to this yet.</p>}</div>)}</div>;
@@ -274,7 +325,7 @@ function EvidenceMap({ active, assessmentByRequirement, selectedEvidenceId, setS
   const requirements = active?.requirements ?? [];
   const statuses = ["directly_evidenced", "indirectly_relevantly_evidenced", "inferred", "not_found", "contradicted"];
   const counts = requirements.reduce((acc: any, requirement: any) => { const status = canonicalAssessment(assessmentByRequirement.get(requirement.id)?.assessment ?? "not_found"); acc[status] = (acc[status] ?? 0) + 1; return acc; }, {});
-  return <section className="mt-6 rise"><div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-end"><div><p className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-primary">Details</p><h2 className="mt-1 font-serif text-2xl font-semibold">Your strengths and gaps</h2><p className="mt-1 max-w-3xl text-sm text-muted-foreground">We check each requirement one by one. "Directly evidenced" means your documents clearly show it. "Indirectly/relevantly evidenced" means something related shows up, but it doesn't fully prove it. "Inferred" means we're reading between the lines — that's our interpretation, not solid evidence. "Not found" just means we didn't see it in what you gave us — not that you don't have it.</p></div><div className="flex flex-wrap gap-2">{statuses.map(status => <Badge key={status} variant="outline" className={assessmentStyle[status]}>{counts[status] ?? 0} {formatStatus(status)}</Badge>)}</div></div><div className="overflow-hidden rounded-xl border bg-card shadow-sm"><div className="overflow-x-auto"><table className="report-table min-w-[1100px] w-full text-left text-sm"><thead className="bg-muted/65 text-[10px] uppercase tracking-[.12em] text-muted-foreground"><tr><th className="w-[20%] px-4 py-3 font-semibold">What's needed</th><th className="w-[13%] px-4 py-3 font-semibold">Result</th><th className="w-[22%] px-4 py-3 font-semibold">What we found</th><th className="w-[29%] px-4 py-3 font-semibold">Details</th><th className="w-[16%] px-4 py-3 font-semibold">What's missing</th></tr></thead><tbody>{requirements.map((requirement: any) => { const assessment = assessmentByRequirement.get(requirement.id) ?? { assessment: "not_found", strength: "not_demonstrated", evidenceIds: [], interpretation: "No analysis has been run for this criterion yet.", gap: "Analyse the library after adding evidence and a target.", components: [] }; const status = canonicalAssessment(assessment.assessment); const firstSource = assessment.evidenceIds?.[0] ? sourceFor(active, assessment.evidenceIds[0]) : null; return <tr key={requirement.id}><td className="px-4 py-4 align-top"><p className="font-semibold leading-5">{requirement.criterion}</p><p className="mt-1 text-xs text-muted-foreground">{requirement.category}</p></td><td className="px-4 py-4 align-top"><Badge variant="outline" className={`${assessmentStyle[status]} capitalize`}>{formatStatus(status)}</Badge><p className="mt-2 text-xs capitalize text-muted-foreground">{formatStatus(assessment.strength)}</p></td><td className="px-4 py-4 align-top">{firstSource ? <button onClick={() => setSelectedEvidenceId(firstSource.evidence.id)} className={`group text-left ${selectedEvidenceId === firstSource.evidence.id ? "text-primary" : ""}`}><p className="line-clamp-3 leading-5 underline decoration-primary/30 underline-offset-4 group-hover:decoration-primary">“{firstSource.evidence.statement}”</p><span className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary">View source <ArrowRight className="size-3" /></span></button> : <p className="text-muted-foreground">Nothing to show here yet.</p>}</td><td className="px-4 py-4 align-top"><p className="leading-5 text-muted-foreground">{assessment.interpretation}</p><ComponentChecks active={active} components={assessment.components} selectedEvidenceId={selectedEvidenceId} setSelectedEvidenceId={setSelectedEvidenceId} /></td><td className="px-4 py-4 align-top text-xs leading-5 text-muted-foreground">{assessment.gap}</td></tr>; })}</tbody></table></div></div>{objective === "A" && <div className="mt-4 rounded-lg border border-primary/15 bg-primary/[.035] px-4 py-3 text-sm text-primary"><strong>How to read this:</strong> it only shows what your documents directly say, what's related but not quite proof, and where the gaps or guesses are. It doesn't decide whether someone should be appointed or shortlisted for the role.</div>}</section>;
+  return <section className="mt-6 rise"><div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-end"><div><p className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-primary">Details</p><h2 className="mt-1 font-serif text-2xl font-semibold">Your strengths and gaps</h2><p className="mt-1 max-w-3xl text-sm text-muted-foreground">We check each requirement one by one. "Directly evidenced" means your documents clearly show it. "Indirectly/relevantly evidenced" means something related shows up, but it doesn't fully prove it. "Inferred" means we're reading between the lines — that's our interpretation, not solid evidence. "Not found" just means we didn't see it in what you gave us — not that you don't have it.</p></div><div className="flex flex-wrap gap-2">{statuses.map(status => <Badge key={status} variant="outline" className={assessmentStyle[status]}>{counts[status] ?? 0} {formatStatus(status)}</Badge>)}</div></div><div className="overflow-hidden rounded-xl border bg-card shadow-sm"><div className="overflow-x-auto"><table className="report-table min-w-[1100px] w-full text-left text-sm"><thead className="bg-muted/65 text-[10px] uppercase tracking-[.12em] text-muted-foreground"><tr><th className="w-[20%] px-4 py-3 font-semibold">What's needed</th><th className="w-[13%] px-4 py-3 font-semibold">Result</th><th className="w-[22%] px-4 py-3 font-semibold">What we found</th><th className="w-[29%] px-4 py-3 font-semibold">Details</th><th className="w-[16%] px-4 py-3 font-semibold">What's missing</th></tr></thead><tbody>{requirements.map((requirement: any) => { const assessment = assessmentByRequirement.get(requirement.id) ?? { assessment: "not_found", strength: "not_demonstrated", evidenceIds: [], interpretation: "No analysis has been run for this criterion yet.", gap: "Analyse the library after adding evidence and a target.", components: [] }; const status = canonicalAssessment(assessment.assessment); const firstSource = assessment.evidenceIds?.[0] ? sourceFor(active, assessment.evidenceIds[0]) : null; return <tr key={requirement.id}><td className="px-4 py-4 align-top"><p className="font-semibold leading-5">{requirement.criterion}</p><p className="mt-1 text-xs text-muted-foreground">{requirement.category}</p></td><td className="px-4 py-4 align-top"><Badge variant="outline" className={`${assessmentStyle[status]} capitalize`}>{formatStatus(status)}</Badge><p className="mt-2 text-xs capitalize text-muted-foreground">{formatStatus(assessment.strength)}</p></td><td className="px-4 py-4 align-top">{firstSource?.evidence ? <button onClick={() => setSelectedEvidenceId(firstSource.evidence.id)} className={`group text-left ${selectedEvidenceId === firstSource.evidence.id ? "text-primary" : ""}`}><p className="line-clamp-3 leading-5 underline decoration-primary/30 underline-offset-4 group-hover:decoration-primary">“{firstSource.evidence.statement}”</p><span className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary">View source <ArrowRight className="size-3" /></span></button> : <p className="text-muted-foreground">Nothing to show here yet.</p>}</td><td className="px-4 py-4 align-top"><p className="leading-5 text-muted-foreground">{assessment.interpretation}</p><ComponentChecks active={active} components={assessment.components} selectedEvidenceId={selectedEvidenceId} setSelectedEvidenceId={setSelectedEvidenceId} /></td><td className="px-4 py-4 align-top text-xs leading-5 text-muted-foreground">{assessment.gap}</td></tr>; })}</tbody></table></div></div>{objective === "A" && <div className="mt-4 rounded-lg border border-primary/15 bg-primary/[.035] px-4 py-3 text-sm text-primary"><strong>How to read this:</strong> it only shows what your documents directly say, what's related but not quite proof, and where the gaps or guesses are. It doesn't decide whether someone should be appointed or shortlisted for the role.</div>}</section>;
 }
 
 function DeleteDocumentButton({ title, pending, onConfirm }: { title: string; pending: boolean; onConfirm: () => void }) {
