@@ -3,7 +3,7 @@
 // short-lived presigned GET URL so the bucket itself stays private.
 
 import { randomUUID } from "crypto";
-import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { ENV } from "./_core/env";
 
@@ -85,4 +85,12 @@ export async function storageGetSignedUrl(relKey: string): Promise<string> {
   return getSignedUrl(client, new GetObjectCommand({ Bucket: bucket, Key: key }), {
     expiresIn: SIGNED_URL_EXPIRY_SECONDS,
   });
+}
+
+export async function storageDelete(relKey: string): Promise<void> {
+  const client = getClient();
+  const bucket = getBucketName();
+  const key = normalizeKey(relKey);
+
+  await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
 }
