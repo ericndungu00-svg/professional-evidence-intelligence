@@ -12,15 +12,18 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { getDb } from "../db";
 import { serveStatic, setupVite } from "./vite";
+import { ENV } from "./env";
 
-// Guards the only endpoints reachable with zero authentication that either
-// cost money per call (guest.startAnalyse triggers a real Gemini request)
-// or are attractive to brute force (auth.login, auth.signup). tRPC batches
-// multiple procedure calls into one comma-separated path segment
-// (httpBatchLink), so this matches on procedure name rather than the exact
-// path -- a request touching any of these procedures, batched or not,
-// counts against the limit.
-const RATE_LIMITED_PROCEDURES = ["guest.startAnalyse", "auth.login", "auth.signup", "auth.requestPasswordReset", "auth.resetPassword"];
+// Guards every endpoint that either costs money per call (guest.startAnalyse
+// and evidence.runAnalysis both trigger a real Gemini request) or is
+// attractive to brute force (auth.login, auth.signup) -- evidence.runAnalysis
+// requires a signed-in session, but that alone doesn't cap how many Gemini
+// calls one account can trigger, so it's rate-limited the same as the
+// zero-auth procedures below. tRPC batches multiple procedure calls into one
+// comma-separated path segment (httpBatchLink), so this matches on procedure
+// name rather than the exact path -- a request touching any of these
+// procedures, batched or not, counts against the limit.
+const RATE_LIMITED_PROCEDURES = ["guest.startAnalyse", "evidence.runAnalysis", "auth.login", "auth.signup", "auth.requestPasswordReset", "auth.resetPassword"];
 
 function requestTouchesLimitedProcedure(req: Request): boolean {
   const procedurePath = req.path.slice(1); // strip the leading "/" left after the /api/trpc mount
@@ -78,7 +81,22 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
   throw new Error(`No available port found starting from ${startPort}`);
 }
 
+// SESSION_SECRET is the pepper mixed into every session/reset-token hash
+// (see server/_core/auth.ts) -- ENV falls back to "" when it's unset so a
+// missing variable doesn't crash every other module that imports ENV, but
+// actually starting the server on that fallback would mean every session
+// hash is computed with a well-known, empty pepper. Checked once here,
+// right before the server accepts any traffic, rather than in env.ts
+// itself, so a misconfigured deploy fails loudly at startup instead of
+// silently serving predictable session tokens.
+function assertRequiredEnv() {
+  if (!ENV.sessionSecret) {
+    throw new Error("SESSION_SECRET is not set. Refusing to start: sessions and password-reset tokens would be hashed with a predictable, empty pepper. Set SESSION_SECRET (e.g. `openssl rand -hex 32`) and restart.");
+  }
+}
+
 async function startServer() {
+  assertRequiredEnv();
   await runPendingMigrations();
 
   const app = express();
