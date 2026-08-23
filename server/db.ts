@@ -169,3 +169,14 @@ export async function getDocumentById(userId: number, id: number) {
   const result = await db.select().from(evidenceDocuments).where(and(eq(evidenceDocuments.userId, userId), eq(evidenceDocuments.id, id))).limit(1);
   return result[0] ?? null;
 }
+
+// Used by the /storage/* download proxy to prove the requesting session
+// owns the file before a signed URL is minted for it -- a storage key alone
+// (evidence/{userId}/{timestamp}_{filename}) is not a secret, so ownership
+// must be re-checked against the database, not inferred from the key shape.
+export async function getDocumentByStorageKey(userId: number, storageKey: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is unavailable.");
+  const result = await db.select({ id: evidenceDocuments.id }).from(evidenceDocuments).where(and(eq(evidenceDocuments.userId, userId), eq(evidenceDocuments.storageKey, storageKey), isNull(evidenceDocuments.deletedAt))).limit(1);
+  return result[0] ?? null;
+}

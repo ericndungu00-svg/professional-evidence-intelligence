@@ -1,5 +1,7 @@
 import "dotenv/config";
 import express from "express";
+import type { Request } from "express";
+import rateLimit from "express-rate-limit";
 import { createServer } from "http";
 import net from "net";
 import path from "path";
@@ -10,6 +12,37 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { getDb } from "../db";
 import { serveStatic, setupVite } from "./vite";
+
+// Guards the only endpoints reachable with zero authentication that either
+// cost money per call (guest.startAnalyse triggers a real Gemini request)
+// or are attractive to brute force (auth.login, auth.signup). tRPC batches
+// multiple procedure calls into one comma-separated path segment
+// (httpBatchLink), so this matches on procedure name rather than the exact
+// path -- a request touching any of these procedures, batched or not,
+// counts against the limit.
+const RATE_LIMITED_PROCEDURES = ["guest.startAnalyse", "auth.login", "auth.signup"];
+
+function requestTouchesLimitedProcedure(req: Request): boolean {
+  const procedurePath = req.path.slice(1); // strip the leading "/" left after the /api/trpc mount
+  const calledProcedures = procedurePath.split(",");
+  return calledProcedures.some(procedure => RATE_LIMITED_PROCEDURES.includes(procedure));
+}
+
+const sensitiveProcedureLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests. Please wait a moment and try again." },
+});
+
+function rateLimitSensitiveProcedures(req: Parameters<typeof sensitiveProcedureLimiter>[0], res: Parameters<typeof sensitiveProcedureLimiter>[1], next: Parameters<typeof sensitiveProcedureLimiter>[2]) {
+  if (requestTouchesLimitedProcedure(req)) {
+    sensitiveProcedureLimiter(req, res, next);
+    return;
+  }
+  next();
+}
 
 async function runPendingMigrations() {
   const db = await getDb();
@@ -50,6 +83,14 @@ async function startServer() {
 
   const app = express();
   const server = createServer(app);
+  // Railway (and most PaaS hosts) put the app behind a single reverse
+  // proxy, so req.ip is the proxy's own address unless this is set --
+  // without it, every request looks like it comes from one IP and the
+  // rate limiter below either blocks everyone together or (with
+  // express-rate-limit's default validation) refuses to trust
+  // X-Forwarded-For at all. "1" trusts exactly one hop, matching that
+  // topology.
+  app.set("trust proxy", 1);
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
@@ -57,6 +98,7 @@ async function startServer() {
   // tRPC API
   app.use(
     "/api/trpc",
+    rateLimitSensitiveProcedures,
     createExpressMiddleware({
       router: appRouter,
       createContext,
