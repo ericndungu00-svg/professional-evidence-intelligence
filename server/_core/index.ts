@@ -95,8 +95,23 @@ function assertRequiredEnv() {
   }
 }
 
+// A warning, not a startup failure: Resend's sandbox address only reliably
+// delivers to the Resend account owner's own verified email, not real
+// users, but nothing here can fix that automatically -- it takes verifying
+// a sending domain in the Resend dashboard and adding the DNS records it
+// asks for. Surfacing it loudly in the deploy logs (rather than leaving it
+// as a page anyone would have to already know to check) is the most this
+// code can do; refusing to boot over it would be a worse failure mode for
+// a low-traffic launch than a same-day-noticed spam-folder problem.
+function warnAboutRiskyEnvDefaults() {
+  if (ENV.isProduction && ENV.resendFromEmail === "onboarding@resend.dev") {
+    console.warn("[Startup] RESEND_FROM_EMAIL is still Resend's sandbox address (onboarding@resend.dev) -- password-reset emails will not reliably reach real users' inboxes. Verify a sending domain in the Resend dashboard, add its DNS records, and set RESEND_FROM_EMAIL to an address on that domain.");
+  }
+}
+
 async function startServer() {
   assertRequiredEnv();
+  warnAboutRiskyEnvDefaults();
   await runPendingMigrations();
 
   const app = express();
