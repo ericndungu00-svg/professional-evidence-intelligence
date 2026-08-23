@@ -57,6 +57,7 @@ export function AuthDialog({ open, onOpenChange }: Props) {
           <DialogDescription>
             {mode === "login" ? "Sign in to access your private evidence library." : mode === "signup" ? "Create an account to save a private evidence library, uploaded files, and analysis history." : "Enter the email address on your account and we'll send you a link to choose a new password."}
           </DialogDescription>
+          {mode === "login" && <p className="font-serif text-sm italic text-primary/80">Your next role starts with what you can already prove.</p>}
         </DialogHeader>
 
         {mode === "reset-request" && resetRequestSent ? (
