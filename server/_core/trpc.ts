@@ -5,6 +5,16 @@ import type { TrpcContext } from "./context";
 
 const t = initTRPC.context<TrpcContext>().create({
   transformer: superjson,
+  // tRPC's default error shape includes error.data.stack -- an absolute
+  // server file path and full call stack -- in every error response body,
+  // in production exactly as much as in development, since nothing strips
+  // it automatically. The client only ever reads error.data.code (see
+  // useAuth.ts), so nothing here needs it either; the full error is still
+  // logged server-side via the onError hook in server/_core/index.ts.
+  errorFormatter({ shape }) {
+    const { stack: _stack, ...safeData } = shape.data;
+    return { ...shape, data: safeData };
+  },
 });
 
 export const router = t.router;
