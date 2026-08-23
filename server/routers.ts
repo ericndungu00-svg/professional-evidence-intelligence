@@ -11,10 +11,10 @@ import {
   extractedEvidence,
   targetRequirements,
 } from "../drizzle/schema";
-import { createUser, deleteAllSessionsForUser, getDb, getTargetDocument, getUserByEmail, getWorkspace, markPasswordResetTokenUsed, softDeleteDocument, touchUserLastSignedIn, updateUserPassword } from "./db";
+import { createUser, deleteAllSessionsForUser, deleteUserAccount, getDb, getDocumentStorageKeysForUser, getTargetDocument, getUserByEmail, getWorkspace, markPasswordResetTokenUsed, softDeleteDocument, touchUserLastSignedIn, updateUserPassword } from "./db";
 import { DEMO_LABEL, demoAssessments, demoContradictions, demoCurrentRole, demoCurrentRoleResponsibilities, demoDocuments, demoEvidence, demoObjectiveReports, demoProfile, demoRequirements, demoTarget } from "./demoData";
 import { analyseAnnualAppraisal, analyseJobEvaluation, AppraisalGenerationError, detectPlainTextConflicts, extractEvidenceItems, extractRequirements, locationForParagraph, mapEvidenceToRequirements, MappingDraft, matchesClaimedFileType, paragraphize, parseEvidenceFile } from "./evidenceEngine";
-import { storagePut } from "./storage";
+import { storageDelete, storagePut } from "./storage";
 import { COOKIE_NAME } from "@shared/const";
 import { clearSessionCookie, createPasswordResetToken, createSession, destroySessionToken, getUserForPasswordResetToken, hashPassword, sanitizeUser, setSessionCookie, verifyPassword } from "./_core/auth";
 import { sendPasswordResetEmail } from "./_core/email";
@@ -315,6 +315,27 @@ export const appRouter = router({
       setSessionCookie(ctx.req, ctx.res, sessionToken, sessionExpiresAt);
       return sanitizeUser(result.user);
     }),
+    // Password re-entry required, same reasoning as any other irreversible
+    // account action gated behind re-authentication -- a hijacked but still
+    // logged-in session (left-open laptop, XSS'd cookie-less session token)
+    // shouldn't be enough on its own to permanently erase someone's account.
+    deleteAccount: protectedProcedure.input(z.object({
+      password: z.string().min(1),
+    })).mutation(async ({ ctx, input }) => {
+      const valid = await verifyPassword(input.password, ctx.user.passwordHash);
+      if (!valid) throw new TRPCError({ code: "UNAUTHORIZED", message: "Incorrect password." });
+      // Delete the R2 files before the database rows that reference them --
+      // once deleteUserAccount runs there's no record left of which keys
+      // this account ever owned, so this order is the only chance to clean
+      // storage up at all. A storage failure here is logged, not thrown --
+      // the person asked to have their account deleted, and an R2 outage
+      // shouldn't be able to block that.
+      const storageKeys = await getDocumentStorageKeysForUser(ctx.user.id);
+      await Promise.all(storageKeys.map(key => storageDelete(key).catch(error => console.error("[auth.deleteAccount] failed to delete stored file", { userId: ctx.user.id, storageKey: key, error }))));
+      await deleteUserAccount(ctx.user.id);
+      clearSessionCookie(ctx.req, ctx.res);
+      return { success: true } as const;
+    }),
   }),
   demo: router({
     workspace: publicProcedure.query(() => ({
@@ -396,6 +417,13 @@ export const appRouter = router({
     deleteDocument: protectedProcedure.input(z.object({ documentId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
       const removed = await softDeleteDocument(ctx.user.id, input.documentId);
       if (!removed) throw new TRPCError({ code: "NOT_FOUND", message: "This document was not found in your library." });
+      // Best-effort, logged rather than thrown: the document is already gone
+      // from the app the instant deletedAt is set (getDocumentByStorageKey
+      // requires it to be null before minting a download URL), so a failure
+      // here can't leave the app in a broken state -- only an orphaned R2
+      // object, same as before this existed. Not worth failing the user's
+      // delete over a transient storage error.
+      if (removed.storageKey) await storageDelete(removed.storageKey).catch(error => console.error("[evidence.deleteDocument] failed to delete stored file", { documentId: input.documentId, error }));
       return { documentId: input.documentId, message: "Document removed from your library." };
     }),
     upload: protectedProcedure.input(z.object({

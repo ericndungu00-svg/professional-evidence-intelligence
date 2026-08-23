@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   criterionAssessments,
@@ -187,15 +187,57 @@ export async function getTargetDocument(userId: number) {
 }
 
 // Soft delete only -- see the deletedAt comment on evidenceDocuments in
-// drizzle/schema.ts. Returns false if the document doesn't exist, isn't
+// drizzle/schema.ts. Returns null if the document doesn't exist, isn't
 // owned by this user, or was already deleted (idempotent either way).
+// Returns the document's storageKey (if it had one) so the caller can
+// remove the underlying file from R2 -- a soft-deleted document can never
+// be downloaded again anyway (see getDocumentByStorageKey's deletedAt
+// check), so the file becomes pure dead weight in storage from this point.
 export async function softDeleteDocument(userId: number, documentId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database is unavailable.");
-  const [existing] = await db.select({ id: evidenceDocuments.id }).from(evidenceDocuments).where(and(eq(evidenceDocuments.id, documentId), eq(evidenceDocuments.userId, userId), isNull(evidenceDocuments.deletedAt))).limit(1);
-  if (!existing) return false;
+  const [existing] = await db.select({ id: evidenceDocuments.id, storageKey: evidenceDocuments.storageKey }).from(evidenceDocuments).where(and(eq(evidenceDocuments.id, documentId), eq(evidenceDocuments.userId, userId), isNull(evidenceDocuments.deletedAt))).limit(1);
+  if (!existing) return null;
   await db.update(evidenceDocuments).set({ deletedAt: new Date() }).where(and(eq(evidenceDocuments.id, documentId), eq(evidenceDocuments.userId, userId)));
-  return true;
+  return { storageKey: existing.storageKey };
+}
+
+// Every storage key this user has ever had a document stored under
+// (including already soft-deleted documents), so account deletion can
+// clean up R2 even for documents deleted before per-document file cleanup
+// existed. Deleting an already-deleted or nonexistent R2 key is a no-op,
+// so no need to filter by deletedAt here.
+export async function getDocumentStorageKeysForUser(userId: number): Promise<string[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db.select({ storageKey: evidenceDocuments.storageKey }).from(evidenceDocuments).where(eq(evidenceDocuments.userId, userId));
+  return rows.map(row => row.storageKey).filter((key): key is string => Boolean(key));
+}
+
+// Permanently erases a user and everything derived from their account: every
+// document, extracted evidence item, target requirement, and past analysis
+// (plus its assessments/contradictions), deleted in FK dependency order --
+// schema.ts defines no ON DELETE CASCADE, so this has to be explicit rather
+// than relying on the database to cascade it. The caller is responsible for
+// deleting the underlying R2 files first (via getDocumentStorageKeysForUser)
+// -- this only touches the database.
+export async function deleteUserAccount(userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is unavailable.");
+  const analyses = await db.select({ id: evidenceAnalyses.id }).from(evidenceAnalyses).where(eq(evidenceAnalyses.userId, userId));
+  const analysisIds = analyses.map(analysis => analysis.id);
+  if (analysisIds.length) {
+    await db.delete(criterionAssessments).where(inArray(criterionAssessments.analysisId, analysisIds));
+    await db.delete(evidenceContradictions).where(inArray(evidenceContradictions.analysisId, analysisIds));
+  }
+  await db.delete(evidenceAnalyses).where(eq(evidenceAnalyses.userId, userId));
+  await db.delete(targetRequirements).where(eq(targetRequirements.userId, userId));
+  await db.delete(extractedEvidence).where(eq(extractedEvidence.userId, userId));
+  await db.delete(evidenceDocuments).where(eq(evidenceDocuments.userId, userId));
+  await db.delete(evidenceProfiles).where(eq(evidenceProfiles.userId, userId));
+  await db.delete(passwordResetTokens).where(eq(passwordResetTokens.userId, userId));
+  await db.delete(sessions).where(eq(sessions.userId, userId));
+  await db.delete(users).where(eq(users.id, userId));
 }
 
 export async function getDocumentById(userId: number, id: number) {

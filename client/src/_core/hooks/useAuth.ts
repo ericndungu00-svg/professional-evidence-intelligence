@@ -30,6 +30,10 @@ export function useAuth() {
     onSuccess: user => utils.auth.me.setData(undefined, user),
   });
 
+  const deleteAccountMutation = trpc.auth.deleteAccount.useMutation({
+    onSuccess: () => utils.auth.me.setData(undefined, null),
+  });
+
   const logout = useCallback(async () => {
     try {
       await logoutMutation.mutateAsync();
@@ -79,5 +83,8 @@ export function useAuth() {
     resetPassword: resetPasswordMutation.mutateAsync,
     resetPasswordPending: resetPasswordMutation.isPending,
     resetPasswordError: resetPasswordMutation.error,
+    deleteAccount: deleteAccountMutation.mutateAsync,
+    deleteAccountPending: deleteAccountMutation.isPending,
+    deleteAccountError: deleteAccountMutation.error,
   };
 }
