@@ -9,6 +9,7 @@ import { ENV } from "./env";
 
 const BCRYPT_ROUNDS = 12;
 const SESSION_DURATION_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
+const RESET_TOKEN_DURATION_MS = 1000 * 60 * 30; // 30 minutes -- short-lived since it's emailed as a plain link
 
 export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, BCRYPT_ROUNDS);
@@ -47,6 +48,33 @@ export async function getUserForSessionToken(token: string | undefined): Promise
 export async function destroySessionToken(token: string | undefined): Promise<void> {
   if (!token) return;
   await db.deleteSession(hashSessionToken(token));
+}
+
+// Same reasoning as hashSessionToken: the raw token only ever exists in the
+// emailed link, and the "reset:" prefix keeps this hash in its own domain
+// from session-token hashes even though both reuse ENV.sessionSecret as a
+// pepper -- a collision between the two would require breaking SHA-256
+// itself, not just reusing the same secret.
+function hashResetToken(token: string): string {
+  return createHash("sha256").update(`reset:${token}:${ENV.sessionSecret}`).digest("hex");
+}
+
+export async function createPasswordResetToken(userId: number): Promise<{ token: string; expiresAt: Date }> {
+  const token = randomBytes(32).toString("hex");
+  const expiresAt = new Date(Date.now() + RESET_TOKEN_DURATION_MS);
+  await db.createPasswordResetToken({ id: hashResetToken(token), userId, expiresAt });
+  return { token, expiresAt };
+}
+
+// Returns the token's own row id (its hash) alongside the user, so the
+// caller can mark this exact token used after the password update actually
+// succeeds -- not before, so a transient failure doesn't waste the token.
+export async function getUserForPasswordResetToken(token: string): Promise<{ user: User; tokenId: string } | null> {
+  const record = await db.getPasswordResetToken(hashResetToken(token));
+  if (!record || record.usedAt || record.expiresAt.getTime() < Date.now()) return null;
+  const user = await db.getUserById(record.userId);
+  if (!user) return null;
+  return { user, tokenId: record.id };
 }
 
 export function setSessionCookie(req: Request, res: Response, token: string, expiresAt: Date) {

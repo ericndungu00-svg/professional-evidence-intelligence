@@ -31,6 +31,18 @@ export const sessions = mysqlTable("sessions", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
+// Same shape as sessions: the raw token only ever exists in the emailed
+// link, and this table stores just its hash, so a database read alone
+// can't be replayed as a valid reset link. usedAt makes each token
+// single-use even before it expires.
+export const passwordResetTokens = mysqlTable("passwordResetTokens", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  userId: int("userId").notNull().references(() => users.id),
+  expiresAt: timestamp("expiresAt").notNull(),
+  usedAt: timestamp("usedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
 export const evidenceProfiles = mysqlTable(
   "evidenceProfiles",
   {
@@ -140,6 +152,7 @@ export const evidenceContradictions = mysqlTable("evidenceContradictions", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 export type Session = typeof sessions.$inferSelect;
+export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
 export type EvidenceDocument = typeof evidenceDocuments.$inferSelect;
 export type TargetRequirement = typeof targetRequirements.$inferSelect;
 export type ExtractedEvidence = typeof extractedEvidence.$inferSelect;

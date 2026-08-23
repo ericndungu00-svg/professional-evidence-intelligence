@@ -24,6 +24,12 @@ export function useAuth() {
     },
   });
 
+  const requestPasswordResetMutation = trpc.auth.requestPasswordReset.useMutation();
+
+  const resetPasswordMutation = trpc.auth.resetPassword.useMutation({
+    onSuccess: user => utils.auth.me.setData(undefined, user),
+  });
+
   const logout = useCallback(async () => {
     try {
       await logoutMutation.mutateAsync();
@@ -67,5 +73,11 @@ export function useAuth() {
     signup: signupMutation.mutateAsync,
     signupPending: signupMutation.isPending,
     signupError: signupMutation.error,
+    requestPasswordReset: requestPasswordResetMutation.mutateAsync,
+    requestPasswordResetPending: requestPasswordResetMutation.isPending,
+    requestPasswordResetError: requestPasswordResetMutation.error,
+    resetPassword: resetPasswordMutation.mutateAsync,
+    resetPasswordPending: resetPasswordMutation.isPending,
+    resetPasswordError: resetPasswordMutation.error,
   };
 }
