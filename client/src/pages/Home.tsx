@@ -54,6 +54,20 @@ function sourceFor(active: any, evidenceId: number) {
 function formatStatus(value: string) { return value.replace(/_/g, " "); }
 function pluralize(count: number, noun: string) { return `${count} ${noun}${count === 1 ? "" : "s"}`; }
 
+// The one moment worth interrupting someone for: their results are ready.
+// Sonner's richColors (set globally on <Toaster>) gives every success toast
+// a soft tinted background with a coloured border -- fine for routine
+// confirmations ("Saved.", a document upload), but easy to miss for the
+// one that actually matters. Inline `style` here deliberately overrides
+// richColors' default for just this call, without touching the Toaster's
+// global config or any other toast.success() in the app.
+function notifyResultsReady(message: string) {
+  toast.success(message, {
+    duration: 6000,
+    style: { background: "#059669", color: "#ffffff", border: "1px solid #047857", fontWeight: 600 },
+  });
+}
+
 // Mirrors the server's own upload validation (same PDF/DOCX check, same 10 MB
 // limit) so a rejected file never leaves the browser -- no wasted upload
 // round-trip, and this path is fully testable without storage configured.
@@ -99,7 +113,23 @@ export default function Home() {
   const active: any = isAuthenticated ? workspaceQuery.data : (guestWorkspace ?? demoQuery.data);
   const isGuest = !!guestWorkspace?.isGuest;
   const isDemo = !isGuest && (!isAuthenticated || active?.profile?.isDemo === "yes" || active?.isDemo);
-  const isFirstLoad = !entryDismissed && !isGuest && (!isAuthenticated || !(workspaceQuery.data?.documents?.length));
+  // The guest-only hero (FirstLoadEntry -- "Start now", "See the example")
+  // must never render for an authenticated user, at all -- not even a
+  // fresh signup with zero documents yet. Its "Start now" button opens
+  // GuestAnalysisDialog, which runs the anonymous guest.startAnalyse
+  // pipeline into local-only guestWorkspace state; the moment that state
+  // is set, the effect below (which clears guestWorkspace whenever
+  // isAuthenticated is true, so a stale guest session never shadows a real
+  // login) immediately nulls it back out on the very next render, since
+  // the user is already authenticated. The analysis genuinely ran, but the
+  // result never has a chance to render -- confirmed live as the reported
+  // "results don't show" bug, reachable only via this hero's "Start now",
+  // never via the top-nav "Start new" (goHome), which was never routed
+  // through guestOpen for an authenticated user in the first place. Fixed
+  // by removing isAuthenticated from this condition entirely, rather than
+  // patching the guest-dialog path -- an authenticated user has no
+  // business seeing guest-only UI regardless of their document count.
+  const isFirstLoad = !entryDismissed && !isGuest && !isAuthenticated;
   // A returning signed-in user (an existing library, not their first visit)
   // lands on a dashboard first rather than straight into an objective --
   // guest mode is untouched, and a brand-new signed-in user with no
@@ -179,7 +209,7 @@ export default function Home() {
     if (data.status === "complete") {
       utils.evidence.workspace.invalidate();
       setActiveSection(data.objectiveReport?.objective === "A" ? "evidence-map" : "objective-summary");
-      toast.success(data.summary ?? "Analysis complete.");
+      notifyResultsReady(data.summary ?? "Analysis complete.");
     } else {
       const message = data.summary ?? "Analysis failed.";
       setAnalysisError(message);
@@ -205,7 +235,7 @@ export default function Home() {
       setObjective("A");
       setActiveSection("evidence-map");
       setGuestOpen(false);
-      toast.success("Here's what we found — this won't be saved anywhere.");
+      notifyResultsReady("Here's what we found — this won't be saved anywhere.");
     } else {
       toast.error(job.error ?? "Guest analysis failed.");
     }
@@ -233,6 +263,23 @@ export default function Home() {
     if (dashboardCheckedRef.current || !isAuthenticated || isGuest || !workspaceQuery.data) return;
     dashboardCheckedRef.current = true;
     if ((workspaceQuery.data.documents?.length ?? 0) > 0) setDashboardDismissed(false);
+  }, [isAuthenticated, isGuest, workspaceQuery.data]);
+
+  // isFirstLoad now skips the guest hero unconditionally for an
+  // authenticated user (see its own comment above), which for a fresh
+  // signup with zero documents lands them on the normal workspace layout
+  // with whatever activeSection already happens to be -- "evidence-map" by
+  // default, an empty results table, not the add-a-document flow. Once
+  // per page load, route that specific case (authenticated, zero
+  // documents) to "library" instead, matching exactly what the top-nav
+  // "Start new" (goHome) already does for the same account state.
+  // Returning users with an existing library are unaffected: showDashboard
+  // (above) already handles them via ReturningUserDashboard.
+  const entryAutoRoutedRef = useRef(false);
+  useEffect(() => {
+    if (entryAutoRoutedRef.current || !isAuthenticated || isGuest || !workspaceQuery.data) return;
+    entryAutoRoutedRef.current = true;
+    if ((workspaceQuery.data.documents?.length ?? 0) === 0) setActiveSection("library");
   }, [isAuthenticated, isGuest, workspaceQuery.data]);
 
   const ensureAuth = () => { if (!isAuthenticated) { toast.message("Sign in to save this to your library."); setAuthOpen(true); return false; } return true; };
@@ -413,25 +460,13 @@ export default function Home() {
         <div className={`mb-6 flex gap-3 rounded-lg border border-primary/15 bg-secondary/55 px-4 py-3 text-sm text-secondary-foreground ${isResultsScreen ? "items-start" : "items-center"}`}><ShieldCheck className={`size-5 shrink-0 ${isResultsScreen ? "mt-0.5" : ""}`} />{isResultsScreen ? <p><strong>Decision support, not a determination.</strong> This tool analyses supplied professional evidence only. It does not determine employment eligibility, banding/grading decisions, legal rights, job-evaluation outcomes, or professional competence for any profession.</p> : <p><strong>Decision support, not a determination.</strong></p>}</div>
 
         {isFirstLoad ? <FirstLoadEntry onStart={() => {
-          // Belt-and-suspenders alongside the loading-gate fix above: if an
-          // authenticated user with an existing library ever reaches this
-          // screen, send them to their real workspace instead of the
-          // guest-only paste flow, which doesn't save anything for them and
-          // has no connection to their existing documents. A guest, or a
-          // genuinely new signed-in user with nothing saved yet, keeps the
-          // original quick-start behaviour exactly as before.
-          if (isAuthenticated && (workspaceQuery.data?.documents?.length ?? 0) > 0) { setEntryDismissed(true); setDashboardDismissed(false); return; }
+          // isFirstLoad guarantees !isAuthenticated (see its own comment) --
+          // this hero, and this handler, only ever render for a guest.
           setGuestOpen(true);
         }} onExploreDemo={() => {
-          // For a guest, dismissing the entry screen is enough -- `active`
-          // already falls back to the shared demo dataset. For a signed-in
-          // user `active` is always their own real workspace, so dismissing
-          // the entry screen alone left them looking at their own empty
-          // account under a button that promised Sarah's example. loadDemo
-          // is a no-op once a real document exists, so it's safe to call
-          // unconditionally here -- isFirstLoad guarantees the library is
-          // still empty at this point.
-          if (isAuthenticated) loadDemo.mutate();
+          // Dismissing the entry screen is enough: `active` already falls
+          // back to the shared demo dataset for an unauthenticated visitor,
+          // and isFirstLoad guarantees that's exactly who's here.
           setEntryDismissed(true);
         }} /> : showDashboard ? <ReturningUserDashboard workspace={active} onChooseObjective={(next: Objective) => { setDashboardDismissed(true); chooseObjective(next); }} onViewLibrary={() => { setDashboardDismissed(true); setActiveSection("library"); }} /> : <><section className="relative overflow-hidden rounded-xl border bg-card px-6 py-8 shadow-[0_12px_36px_-26px_rgba(14,32,50,.35)] lg:px-10">
           {isReturningWithHistory ? <div className="relative max-w-3xl"><p className="font-mono text-[11px] font-bold uppercase tracking-[.18em] text-primary">Welcome back</p><h1 className="mt-2 font-serif text-3xl font-semibold tracking-tight lg:text-4xl">{returningWelcomeMessage}</h1></div> : <>
