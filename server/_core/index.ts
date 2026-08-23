@@ -102,6 +102,12 @@ async function startServer() {
     createExpressMiddleware({
       router: appRouter,
       createContext,
+      // The errorFormatter in ./trpc.ts strips the stack trace from what
+      // reaches the client -- log the full error here instead, so a real
+      // failure is still debuggable from the server logs.
+      onError({ error, path }) {
+        console.error(`[tRPC] ${path ?? "<unknown path>"}:`, error);
+      },
     })
   );
   // development mode uses Vite, production mode uses static files
