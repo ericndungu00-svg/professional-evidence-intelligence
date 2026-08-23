@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { FormEvent, useState } from "react";
 import { toast } from "sonner";
+import { Link } from "wouter";
 
 type Props = {
   open: boolean;
@@ -94,6 +95,7 @@ export function AuthDialog({ open, onOpenChange }: Props) {
                 {mode === "signup" && <p className="text-xs text-muted-foreground">At least 8 characters.</p>}
               </div>
             )}
+            {mode === "signup" && <p className="text-xs text-muted-foreground">By creating an account, you agree to our <Link href="/terms" className="underline underline-offset-4 hover:text-foreground">Terms</Link> and <Link href="/privacy" className="underline underline-offset-4 hover:text-foreground">Privacy Policy</Link>.</p>}
             <Button type="submit" disabled={pending} className="mt-1">
               {pending && <Loader2 className="animate-spin" />}
               {mode === "login" ? "Sign in" : mode === "signup" ? "Create account" : "Send reset link"}

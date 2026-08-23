@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { AuthDialog } from "@/components/AuthDialog";
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Link } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { AlertTriangle, ArrowRight, BookOpenText, CheckCircle2, ChevronRight, CircleAlert, FileText, FolderOpen, Landmark, Loader2, LockKeyhole, Menu, Plus, Scale, SearchCheck, ShieldCheck, Sparkles, Target, Trash2, Upload, X } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
@@ -504,7 +505,7 @@ export default function Home() {
         </div></>}
       </main>
 
-      <div className="mt-auto border-t border-primary/20 bg-primary px-4 py-3 text-center text-[11px] leading-5 text-primary-foreground">This tool provides decision support from supplied evidence only. It does not determine employment eligibility, banding/grading decisions, legal rights, job-evaluation outcomes, or professional competence for any profession.</div>
+      <div className="mt-auto border-t border-primary/20 bg-primary px-4 py-3 text-center text-[11px] leading-5 text-primary-foreground"><p>This tool provides decision support from supplied evidence only. It does not determine employment eligibility, banding/grading decisions, legal rights, job-evaluation outcomes, or professional competence for any profession.</p><p className="mt-1 text-primary-foreground/70"><Link href="/privacy" className="underline-offset-2 hover:underline">Privacy</Link><span className="mx-2">·</span><Link href="/terms" className="underline-offset-2 hover:underline">Terms</Link></p></div>
       {selectedSource?.evidence && <SourcePanel evidence={selectedSource.evidence} document={selectedSource.document} onClose={() => setSelectedEvidenceId(null)} />}
       <GuestAnalysisDialog open={guestOpen} onOpenChange={setGuestOpen} onSubmit={data => guestAnalysis.mutate(data)} pending={isGuestAnalysing} />
       <AuthDialog open={authOpen} onOpenChange={setAuthOpen} />
