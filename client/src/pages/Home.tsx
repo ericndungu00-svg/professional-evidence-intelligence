@@ -52,6 +52,7 @@ function sourceFor(active: any, evidenceId: number) {
 }
 
 function formatStatus(value: string) { return value.replace(/_/g, " "); }
+function pluralize(count: number, noun: string) { return `${count} ${noun}${count === 1 ? "" : "s"}`; }
 
 // Mirrors the server's own upload validation (same PDF/DOCX check, same 10 MB
 // limit) so a rejected file never leaves the browser -- no wasted upload
@@ -110,6 +111,22 @@ export default function Home() {
   // documents, safety) gets the short form; the full text stays reachable
   // on "How this works".
   const isResultsScreen = !isFirstLoad && !showDashboard && (activeSection === "evidence-map" || activeSection === "objective-summary");
+  // Once someone is past onboarding (has their own saved documents), the
+  // 4-step "About you" stepper reads as stale rather than helpful -- "1
+  // About you" shown as not-yet-started when they've actually got a whole
+  // library and results behind them. Swapped for a short welcome message
+  // with their real counts instead. Guest/demo and a genuinely first-time
+  // signed-in user (isFirstLoad true, no documents yet) are untouched --
+  // this only fires once entryDismissed/isFirstLoad has already resolved
+  // false, i.e. exactly where the stepper would otherwise render.
+  const isReturningWithHistory = isAuthenticated && !isGuest && (workspaceQuery.data?.documents?.length ?? 0) > 0;
+  const returningWelcomeMessage = useMemo(() => {
+    const documentCount = active?.documents?.length ?? 0;
+    const resultCount = Object.keys(active?.objectiveReports ?? {}).length;
+    return resultCount > 0
+      ? `Welcome back. You've got ${pluralize(documentCount, "document")} ready and ${pluralize(resultCount, "result")} waiting.`
+      : `Welcome back. You've got ${pluralize(documentCount, "document")} ready. Run a check whenever you're ready.`;
+  }, [active]);
   const target = useMemo(() => active?.targetDocument ?? active?.documents?.find((document: any) => document.documentType === "target"), [active]);
   const assessmentByRequirement = useMemo(() => new Map<number, any>((active?.objectiveReports?.A?.mappings ?? active?.assessments ?? []).map((assessment: any): [number, any] => [assessment.requirementId, assessment])), [active]);
   const selectedSource = selectedEvidenceId ? sourceFor(active, selectedEvidenceId) : null;
@@ -343,10 +360,10 @@ export default function Home() {
     <div className="flex min-h-screen flex-col bg-background text-foreground">
       <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur">
         <div className="mx-auto flex max-w-[1540px] items-center justify-between gap-3 px-5 py-3 lg:px-8">
-          <button type="button" onClick={goHome} className="flex min-w-0 items-center gap-3 text-left"><span className="grid size-9 shrink-0 place-items-center rounded-md bg-primary text-primary-foreground"><SearchCheck className="size-5" /></span><span className="min-w-0"><span className="block text-[11px] font-bold uppercase tracking-[0.2em] text-primary">Evidence review</span><span className="hidden truncate font-serif text-lg font-semibold leading-5 sm:block">See what your CV actually proves</span></span></button>
+          <button type="button" onClick={goHome} className="flex min-w-0 items-center gap-3 text-left"><span className="grid size-9 shrink-0 place-items-center rounded-md bg-primary text-primary-foreground"><SearchCheck className="size-5" /></span><span className="min-w-0"><span className="block text-[11px] font-bold uppercase tracking-[0.2em] text-primary">Evidence review</span><span className="hidden truncate font-serif text-lg font-semibold leading-5 sm:block md:hidden xl:block">See what your CV actually proves</span></span></button>
 
           {/* Persistent global nav, desktop (>=768px): identical on every screen. */}
-          <nav aria-label="Global" className="hidden items-center gap-1 md:flex">
+          <nav aria-label="Global" className="hidden items-center gap-1 md:flex xl:gap-2">
             <HeaderNavLink label="Start new" onClick={goHome} />
             <HeaderNavLink label="Documents" active={activeSection === "library" && !isFirstLoad && !showDashboard} onClick={() => navigateTo("library")} />
             <HeaderNavLink label="Results" active={activeSection === "objective-summary" && !isFirstLoad && !showDashboard} onClick={() => navigateTo("objective-summary")} />
@@ -354,12 +371,12 @@ export default function Home() {
           </nav>
 
           <div className="flex items-center gap-2">
-            {isDemo && <Badge variant="outline" className="hidden border-amber-300 bg-amber-50 text-amber-800 sm:flex">Example only</Badge>}
-            {isGuest && <Badge variant="outline" className="hidden border-primary/30 bg-primary/5 text-primary sm:flex">Not saved yet</Badge>}
+            {isDemo && <Badge variant="outline" className="hidden border-amber-300 bg-amber-50 text-amber-800 sm:flex md:hidden xl:flex">Example only</Badge>}
+            {isGuest && <Badge variant="outline" className="hidden border-primary/30 bg-primary/5 text-primary sm:flex md:hidden xl:flex">Not saved yet</Badge>}
             {isAuthenticated ? <>
               <span className="hidden text-sm font-medium lg:inline">{user?.name}</span>
               <Button variant="outline" size="sm" onClick={handleSignOut} className="hidden md:inline-flex">Sign out</Button>
-            </> : <Button size="sm" onClick={() => setAuthOpen(true)} className="hidden md:inline-flex">Sign in to save your results</Button>}
+            </> : <Button size="sm" onClick={() => setAuthOpen(true)} className="hidden md:inline-flex"><span className="xl:hidden">Sign in</span><span className="hidden xl:inline">Sign in to save your results</span></Button>}
 
             {/* Mobile (<768px): hamburger opens the same five items -- the direct fix for "New analysis" being unreachable on mobile. */}
             <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
@@ -417,8 +434,10 @@ export default function Home() {
           if (isAuthenticated) loadDemo.mutate();
           setEntryDismissed(true);
         }} /> : showDashboard ? <ReturningUserDashboard workspace={active} onChooseObjective={(next: Objective) => { setDashboardDismissed(true); chooseObjective(next); }} onViewLibrary={() => { setDashboardDismissed(true); setActiveSection("library"); }} /> : <><section className="relative overflow-hidden rounded-xl border bg-card px-6 py-8 shadow-[0_12px_36px_-26px_rgba(14,32,50,.35)] lg:px-10">
+          {isReturningWithHistory ? <div className="relative max-w-3xl"><p className="font-mono text-[11px] font-bold uppercase tracking-[.18em] text-primary">Welcome back</p><h1 className="mt-2 font-serif text-3xl font-semibold tracking-tight lg:text-4xl">{returningWelcomeMessage}</h1></div> : <>
           <div className="relative max-w-4xl"><div className="mb-3 flex items-center gap-2"><span className="font-mono text-[11px] uppercase tracking-[0.14em] text-primary">About you</span>{isDemo && <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-800">Example data</Badge>}{isGuest && <Badge variant="outline" className="border-primary/30 bg-primary/5 text-primary">Not saved</Badge>}</div><h1 className="font-serif text-4xl font-semibold tracking-tight lg:text-5xl">{active?.profile?.currentRole ?? "Your details"}</h1>{active?.profile ? <p className="mt-2 max-w-3xl text-base text-muted-foreground">{`${active.profile.profession}${active.profile.specialty ? ` · ${active.profile.specialty}` : ""}${active.profile.experience ? ` · ${active.profile.experience}` : ""}`}</p> : !isAuthenticated ? <p className="mt-2 max-w-3xl text-base text-muted-foreground">Try it free, right now — no account needed. Sign in only if you want to save your results for later.</p> : null}<div className="mt-5 flex flex-wrap gap-2">{active?.profile?.targetRole && <Badge variant="secondary" className="font-medium">Aiming for: {active.profile.targetRole}</Badge>}{active?.profile?.currentLevel && <Badge variant="outline">Current level: {active.profile.currentLevel}</Badge>}{isDemo && <Badge variant="outline">Sarah Mwangi</Badge>}</div></div>
           <div className="relative mt-6 flex flex-wrap items-center gap-1.5">{[{ label: "About you", active: !!active?.profile }, { label: "Evidence", active: (active?.documents?.filter((document: any) => document.documentType === "evidence")?.length ?? 0) > 0 }, { label: "Job you want", active: !!target }, { label: "Results", active: (active?.assessments?.length ?? 0) > 0 }].map((step, index) => <span key={step.label} className="flex items-center gap-1.5">{index > 0 && <span className="h-px w-4 shrink-0 bg-border sm:w-8" />}<span className="flex items-center gap-1.5 text-xs"><span className={`grid size-4 shrink-0 place-items-center rounded-full text-[8px] font-bold ${step.active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>{step.active ? <CheckCircle2 className="size-2.5" /> : index + 1}</span><span className={step.active ? "font-medium text-foreground" : "text-muted-foreground"}>{step.label}</span></span></span>)}</div>
+          </>}
         </section>
 
         <div className="mt-6 grid gap-6 xl:grid-cols-[240px_minmax(0,1fr)]">
@@ -449,7 +468,7 @@ export default function Home() {
 function NavButton({ active, icon: Icon, label, onClick }: { active: boolean; icon: typeof Target; label: string; onClick: () => void }) { return <button onClick={onClick} className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors ${active ? "bg-primary text-primary-foreground" : "text-foreground/75 hover:bg-accent hover:text-accent-foreground"}`}><Icon className="size-4" />{label}<ChevronRight className={`ml-auto size-4 ${active ? "opacity-100" : "opacity-0"}`} /></button>; }
 
 // The persistent global top bar's desktop link (>=768px).
-function HeaderNavLink({ label, active, onClick }: { label: string; active?: boolean; onClick: () => void }) { return <button type="button" onClick={onClick} className={`rounded-md px-3 py-2 text-sm font-semibold transition-colors ${active ? "bg-primary/10 text-primary" : "text-foreground/75 hover:text-accent-foreground"}`}>{label}</button>; }
+function HeaderNavLink({ label, active, onClick }: { label: string; active?: boolean; onClick: () => void }) { return <button type="button" onClick={onClick} className={`rounded-md px-2.5 py-2 text-sm font-bold transition-colors xl:px-3.5 ${active ? "bg-primary text-primary-foreground shadow-sm" : "text-foreground/85 hover:bg-accent hover:text-accent-foreground"}`}>{label}</button>; }
 
 // The persistent global nav's mobile hamburger-menu link (<768px). Larger
 // tap target than HeaderNavLink -- this is the direct fix for "New
