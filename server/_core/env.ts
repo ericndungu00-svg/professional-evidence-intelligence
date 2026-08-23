@@ -6,6 +6,9 @@ export const ENV = {
   forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
   geminiApiKey: process.env.GEMINI_API_KEY ?? "",
+  resendApiKey: process.env.RESEND_API_KEY ?? "",
+  // Must be a verified sender on the Resend account the API key belongs to.
+  resendFromEmail: process.env.RESEND_FROM_EMAIL ?? "onboarding@resend.dev",
   r2AccountId: process.env.R2_ACCOUNT_ID ?? "",
   r2AccessKeyId: process.env.R2_ACCESS_KEY_ID ?? "",
   r2SecretAccessKey: process.env.R2_SECRET_ACCESS_KEY ?? "",

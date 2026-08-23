@@ -11,12 +11,13 @@ import {
   extractedEvidence,
   targetRequirements,
 } from "../drizzle/schema";
-import { createUser, getDb, getTargetDocument, getUserByEmail, getWorkspace, softDeleteDocument, touchUserLastSignedIn } from "./db";
+import { createUser, deleteAllSessionsForUser, getDb, getTargetDocument, getUserByEmail, getWorkspace, markPasswordResetTokenUsed, softDeleteDocument, touchUserLastSignedIn, updateUserPassword } from "./db";
 import { DEMO_LABEL, demoAssessments, demoContradictions, demoCurrentRole, demoCurrentRoleResponsibilities, demoDocuments, demoEvidence, demoObjectiveReports, demoProfile, demoRequirements, demoTarget } from "./demoData";
-import { analyseAnnualAppraisal, analyseJobEvaluation, AppraisalGenerationError, detectPlainTextConflicts, extractEvidenceItems, extractRequirements, locationForParagraph, mapEvidenceToRequirements, MappingDraft, paragraphize, parseEvidenceFile } from "./evidenceEngine";
+import { analyseAnnualAppraisal, analyseJobEvaluation, AppraisalGenerationError, detectPlainTextConflicts, extractEvidenceItems, extractRequirements, locationForParagraph, mapEvidenceToRequirements, MappingDraft, matchesClaimedFileType, paragraphize, parseEvidenceFile } from "./evidenceEngine";
 import { storagePut } from "./storage";
 import { COOKIE_NAME } from "@shared/const";
-import { clearSessionCookie, createSession, destroySessionToken, hashPassword, sanitizeUser, setSessionCookie, verifyPassword } from "./_core/auth";
+import { clearSessionCookie, createPasswordResetToken, createSession, destroySessionToken, getUserForPasswordResetToken, hashPassword, sanitizeUser, setSessionCookie, verifyPassword } from "./_core/auth";
+import { sendPasswordResetEmail } from "./_core/email";
 import { parse as parseCookieHeader } from "cookie";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
@@ -267,6 +268,53 @@ export const appRouter = router({
       clearSessionCookie(ctx.req, ctx.res);
       return { success: true } as const;
     }),
+    // Always returns the same generic response whether or not the address
+    // is registered -- same reasoning as login's identical error message
+    // for a wrong email vs. a wrong password: neither response should let a
+    // caller learn whether an account exists. A send failure (e.g. Resend
+    // misconfigured) is deliberately not surfaced to the client for the
+    // same reason; it's still thrown internally so it reaches the server
+    // logs via the tRPC onError hook rather than being silently swallowed.
+    requestPasswordReset: publicProcedure.input(z.object({
+      email: z.string().trim().toLowerCase().email().max(320),
+    })).mutation(async ({ ctx, input }) => {
+      const user = await getUserByEmail(input.email);
+      if (user) {
+        try {
+          const { token } = await createPasswordResetToken(user.id);
+          const origin = `${ctx.req.protocol}://${ctx.req.get("host")}`;
+          await sendPasswordResetEmail(user.email, `${origin}/reset-password?token=${token}`);
+        } catch (error) {
+          // Caught here, not left to propagate: an uncaught throw would
+          // turn into a 500 for a registered email while an unregistered
+          // one still gets the plain 200 below -- that response-shape
+          // difference is exactly the account-enumeration leak this
+          // endpoint exists to avoid. Logged directly rather than via the
+          // tRPC onError hook, since that hook only fires for an error the
+          // procedure actually throws.
+          console.error("[auth.requestPasswordReset] failed to create/send reset link:", error);
+        }
+      }
+      return { message: "If an account exists for that email, we've sent a link to reset your password." } as const;
+    }),
+    resetPassword: publicProcedure.input(z.object({
+      token: z.string().min(1),
+      newPassword: z.string().min(8).max(200),
+    })).mutation(async ({ ctx, input }) => {
+      const invalidToken = new TRPCError({ code: "BAD_REQUEST", message: "This reset link is invalid or has expired. Please request a new one." });
+      const result = await getUserForPasswordResetToken(input.token);
+      if (!result) throw invalidToken;
+      const passwordHash = await hashPassword(input.newPassword);
+      await updateUserPassword(result.user.id, passwordHash);
+      await markPasswordResetTokenUsed(result.tokenId);
+      // A password reset should end any session that already existed --
+      // if the account was compromised, this is what actually locks the
+      // previous holder out, not just the password change on its own.
+      await deleteAllSessionsForUser(result.user.id);
+      const { token: sessionToken, expiresAt: sessionExpiresAt } = await createSession(result.user.id);
+      setSessionCookie(ctx.req, ctx.res, sessionToken, sessionExpiresAt);
+      return sanitizeUser(result.user);
+    }),
   }),
   demo: router({
     workspace: publicProcedure.query(() => ({
@@ -372,6 +420,11 @@ export const appRouter = router({
       const isPdf = input.mimeType === "application/pdf" || lowerFileName.endsWith(".pdf");
       const isDocx = input.mimeType.includes("wordprocessingml") || lowerFileName.endsWith(".docx");
       if (!isPdf && !isDocx) throw new TRPCError({ code: "BAD_REQUEST", message: "We can only accept PDF or DOCX files right now. Please upload one of those, or paste the text in below instead." });
+      // mimeType and fileName are both client-supplied strings, so the
+      // isPdf/isDocx check above only confirms what the request claims to
+      // be, not what the bytes actually are -- verify the real file
+      // signature before this reaches storage or the parser.
+      if (!matchesClaimedFileType(bytes, isPdf ? "pdf" : "docx")) throw new TRPCError({ code: "BAD_REQUEST", message: "That file doesn't look like a real PDF or DOCX file. Please check it and try again, or paste the text in below instead." });
       const profile = (await getWorkspace(ctx.user.id)).profile;
       const stored = await storagePut(`evidence/${ctx.user.id}/${Date.now()}_${sanitizeName(input.fileName)}`, bytes, input.mimeType);
       const parsed = input.sourceText?.trim() ? { text: input.sourceText.trim(), status: "ready" as const } : await parseEvidenceFile(input.fileName, input.mimeType, bytes);

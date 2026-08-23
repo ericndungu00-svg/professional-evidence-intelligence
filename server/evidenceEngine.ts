@@ -38,6 +38,22 @@ export function locationForParagraph(paragraphIndex: number, paragraphs: string[
   return heading ? `Section: ${heading.replace(/:$/, "")} · Paragraph ${paragraphIndex + 1}` : `Paragraph ${paragraphIndex + 1}`;
 }
 
+// The upload router only ever decides PDF-vs-DOCX from the client-supplied
+// mimeType and filename extension -- both are plain strings the client
+// sends, so a request can claim either type for any bytes at all. This
+// checks what the file actually starts with, independent of what it's
+// labelled: a PDF's own spec requires it start with "%PDF-", and DOCX is a
+// ZIP/OOXML package, so a real one always starts with the ZIP local-file-
+// header signature. A mismatch here means the claimed type doesn't match
+// the bytes, regardless of what mimeType or fileName said.
+const PDF_SIGNATURE = Buffer.from("%PDF-", "ascii");
+const ZIP_SIGNATURE = Buffer.from([0x50, 0x4b, 0x03, 0x04]); // "PK\x03\x04"
+
+export function matchesClaimedFileType(bytes: Buffer, claimedType: "pdf" | "docx"): boolean {
+  if (claimedType === "pdf") return bytes.subarray(0, PDF_SIGNATURE.length).equals(PDF_SIGNATURE);
+  return bytes.subarray(0, ZIP_SIGNATURE.length).equals(ZIP_SIGNATURE);
+}
+
 export async function parseEvidenceFile(fileName: string, mimeType: string, bytes: Buffer): Promise<ParsedUpload> {
   const lower = fileName.toLowerCase();
   if (mimeType === "text/plain" || lower.endsWith(".txt") || lower.endsWith(".md")) {

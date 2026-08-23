@@ -20,7 +20,7 @@ import { serveStatic, setupVite } from "./vite";
 // (httpBatchLink), so this matches on procedure name rather than the exact
 // path -- a request touching any of these procedures, batched or not,
 // counts against the limit.
-const RATE_LIMITED_PROCEDURES = ["guest.startAnalyse", "auth.login", "auth.signup"];
+const RATE_LIMITED_PROCEDURES = ["guest.startAnalyse", "auth.login", "auth.signup", "auth.requestPasswordReset", "auth.resetPassword"];
 
 function requestTouchesLimitedProcedure(req: Request): boolean {
   const procedurePath = req.path.slice(1); // strip the leading "/" left after the /api/trpc mount

@@ -7,6 +7,7 @@ import {
   evidenceDocuments,
   evidenceProfiles,
   extractedEvidence,
+  passwordResetTokens,
   sessions,
   targetRequirements,
   users,
@@ -70,6 +71,40 @@ export async function deleteSession(id: string) {
   const db = await getDb();
   if (!db) return;
   await db.delete(sessions).where(eq(sessions.id, id));
+}
+
+// A password reset should also end any existing session -- if the account
+// was ever compromised, resetting the password shouldn't leave an
+// attacker's session still valid.
+export async function deleteAllSessionsForUser(userId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(sessions).where(eq(sessions.userId, userId));
+}
+
+export async function createPasswordResetToken(values: { id: string; userId: number; expiresAt: Date }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is unavailable.");
+  await db.insert(passwordResetTokens).values(values);
+}
+
+export async function getPasswordResetToken(id: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(passwordResetTokens).where(eq(passwordResetTokens.id, id)).limit(1);
+  return result[0];
+}
+
+export async function markPasswordResetTokenUsed(id: string) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(passwordResetTokens).set({ usedAt: new Date() }).where(eq(passwordResetTokens.id, id));
+}
+
+export async function updateUserPassword(userId: number, passwordHash: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is unavailable.");
+  await db.update(users).set({ passwordHash }).where(eq(users.id, userId));
 }
 
 export async function getWorkspace(userId: number) {
