@@ -94,6 +94,7 @@ export default function Home() {
   const [uploadOpen, setUploadOpen] = useState(false);
   const [guestOpen, setGuestOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
+  const [proInterestOpen, setProInterestOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [guestWorkspace, setGuestWorkspace] = useState<any>(null);
   const [entryDismissed, setEntryDismissed] = useState(false);
@@ -205,6 +206,11 @@ export default function Home() {
       toast.error(error instanceof Error ? error.message : "Could not delete your account.");
     }
   }
+  // Demand-measurement only -- see ProInterestDialog. No payment is
+  // initiated anywhere in this flow.
+  const recordProInterest = trpc.commercial.recordProInterest.useMutation({
+    onError: error => toast.error(error.message),
+  });
   // The analysis endpoints kick off a background job and return immediately
   // (rather than blocking the request on the full LLM pipeline, which can
   // exceed platform/proxy timeouts on longer submissions) — these mutations
@@ -436,6 +442,7 @@ export default function Home() {
             {isGuest && <Badge variant="outline" className="hidden border-primary/30 bg-primary/5 text-primary sm:flex md:hidden xl:flex">Not saved yet</Badge>}
             {isAuthenticated ? <>
               <span className="hidden text-sm font-medium lg:inline">{user?.name}</span>
+              {!isGuest && <Button variant="outline" size="sm" onClick={() => setProInterestOpen(true)} className="hidden border-primary/30 text-primary hover:bg-primary/5 md:inline-flex">Get Pro</Button>}
               <Button variant="outline" size="sm" onClick={handleSignOut} className="hidden md:inline-flex">Sign out</Button>
             </> : <Button size="sm" onClick={() => setAuthOpen(true)} className="hidden md:inline-flex"><span className="xl:hidden">Sign in</span><span className="hidden xl:inline">Sign in to save your results</span></Button>}
 
@@ -461,6 +468,7 @@ export default function Home() {
                 <SheetFooter className="border-t">
                   {isAuthenticated ? <>
                     {user?.name && <p className="px-1 text-sm font-medium text-muted-foreground">{user.name}</p>}
+                    {!isGuest && <Button variant="outline" className="border-primary/30 text-primary hover:bg-primary/5" onClick={() => { setMobileNavOpen(false); setProInterestOpen(true); }}>Get Pro</Button>}
                     <Button variant="outline" onClick={() => { setMobileNavOpen(false); handleSignOut(); }}>Sign out</Button>
                   </> : <Button onClick={() => { setMobileNavOpen(false); setAuthOpen(true); }}>Sign in to save your results</Button>}
                 </SheetFooter>
@@ -510,6 +518,7 @@ export default function Home() {
       <GuestAnalysisDialog open={guestOpen} onOpenChange={setGuestOpen} onSubmit={data => guestAnalysis.mutate(data)} pending={isGuestAnalysing} />
       <AuthDialog open={authOpen} onOpenChange={setAuthOpen} />
       <UploadDialog open={uploadOpen} onOpenChange={setUploadOpen} draft={uploadDraft} setDraft={setUploadDraft} file={uploadFile} setFile={setUploadFile} onSubmit={handleUpload} pending={upload.isPending || pasteTarget.isPending || pasteEvidence.isPending || pasteCurrentRole.isPending} />
+      <ProInterestDialog open={proInterestOpen} onOpenChange={setProInterestOpen} onInterested={() => recordProInterest.mutate({ objective, source: activeSection })} pending={recordProInterest.isPending} success={recordProInterest.isSuccess} />
     </div>
   );
 }
@@ -599,3 +608,30 @@ function ProfileDialog({ open, onOpenChange, draft, setDraft, onSubmit, isAuthen
 }
 function UploadDialog({ open, onOpenChange, draft, setDraft, file, setFile, onSubmit, pending }: any) { return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl"><DialogHeader><DialogTitle className="font-serif text-2xl">Add a document</DialogTitle><DialogDescription>Upload a file (PDF or DOCX, up to 10 MB) or just paste the text in directly.</DialogDescription></DialogHeader><form onSubmit={onSubmit} className="grid gap-4 py-2"><Field label="Give it a name"><Input placeholder="e.g. Current role description" value={draft.title} onChange={event => setDraft({ ...draft, title: event.target.value })} /></Field><div className="grid gap-4 sm:grid-cols-2"><Field label="What kind of document is this?"><Select value={draft.documentType} onValueChange={(value: "evidence" | "target" | "current_role") => setDraft({ ...draft, documentType: value, sourceKind: value === "target" ? "Person specification" : value === "current_role" ? "Current role responsibilities" : draft.sourceKind })}><SelectTrigger className="w-full min-w-0"><SelectValue className="truncate" /></SelectTrigger><SelectContent><SelectItem value="evidence">Evidence — like a CV, appraisal, or feedback</SelectItem><SelectItem value="target">Job description — for "Applying for a job"</SelectItem><SelectItem value="current_role">Your current role — for "Wondering if my role matches my pay"</SelectItem></SelectContent></Select></Field><Field label="Type"><Input value={draft.sourceKind} onChange={event => setDraft({ ...draft, sourceKind: event.target.value })} /></Field></div><Field label="File (optional)"><Input type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={event => { const selected = event.target.files?.[0] ?? null; if (selected) { const error = validateUploadFile(selected); if (error) { toast.error(error); event.target.value = ""; setFile(null); return; } } setFile(selected); }} />{file && <p className="mt-1 text-xs text-muted-foreground">Selected: {file.name}</p>}</Field><Field label={draft.documentType === "target" ? "Or paste the job description in here (optional if you picked a file)" : draft.documentType === "current_role" ? "Or paste your current role in here (optional if you picked a file)" : "Or paste your evidence in here (optional if you picked a file)"}><Textarea rows={4} className="max-h-64 overflow-y-auto" placeholder={draft.documentType === "target" ? "Paste the person specification or role criteria here." : draft.documentType === "current_role" ? "Paste the current job description or formal role responsibilities here." : "Paste a CV, appraisal, feedback, or other evidence record here. If a file is also selected, this text is used for analysis and the original file is retained separately."} value={draft.sourceText} onChange={event => setDraft({ ...draft, sourceText: event.target.value })} /></Field><div className="flex justify-end"><Button disabled={pending} type="submit">{pending && <Loader2 className="animate-spin" />}{draft.sourceText.trim() && !file ? "Add it" : "Add and process"}</Button></div></form></DialogContent></Dialog>; }
 function Field({ label, children }: { label: string; children: React.ReactNode }) { return <div className="grid min-w-0 gap-1.5"><Label>{label}</Label>{children}</div>; }
+
+// Demand-measurement only. Clicking "Yes, let me know" records a server-side
+// interest signal (see routers.ts commercial.recordProInterest) -- it does
+// not start a checkout, take payment details, or create a subscription of
+// any kind.
+function ProInterestDialog({ open, onOpenChange, onInterested, pending, success }: { open: boolean; onOpenChange: (open: boolean) => void; onInterested: () => void; pending: boolean; success: boolean }) {
+  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="sm:max-w-md">
+    <DialogHeader>
+      <DialogTitle className="font-serif text-2xl">CV Optimiser Pro</DialogTitle>
+      <DialogDescription>Unlimited CV optimisations for <strong className="text-foreground">£9.99/month</strong>.</DialogDescription>
+    </DialogHeader>
+    {success ? (
+      <div className="flex items-start gap-3 rounded-lg border border-primary/15 bg-secondary/55 px-4 py-3 text-sm text-secondary-foreground">
+        <CheckCircle2 className="mt-0.5 size-5 shrink-0" />
+        <p>Thanks — we've got you down. We'll be in touch when Pro access opens.</p>
+      </div>
+    ) : (
+      <div className="grid gap-4">
+        <p className="text-sm leading-6 text-muted-foreground">We're opening Pro access to our first users. Let us know if you'd like early access.</p>
+        <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Not now</Button>
+          <Button onClick={onInterested} disabled={pending}>{pending && <Loader2 className="animate-spin" />}Yes, let me know</Button>
+        </div>
+      </div>
+    )}
+  </DialogContent></Dialog>;
+}
