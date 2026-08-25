@@ -1,6 +1,7 @@
 import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
+  commercialEvents,
   criterionAssessments,
   evidenceAnalyses,
   evidenceContradictions,
@@ -237,6 +238,7 @@ export async function deleteUserAccount(userId: number) {
   await db.delete(evidenceProfiles).where(eq(evidenceProfiles.userId, userId));
   await db.delete(passwordResetTokens).where(eq(passwordResetTokens.userId, userId));
   await db.delete(sessions).where(eq(sessions.userId, userId));
+  await db.delete(commercialEvents).where(eq(commercialEvents.userId, userId));
   await db.delete(users).where(eq(users.id, userId));
 }
 
@@ -256,4 +258,56 @@ export async function getDocumentByStorageKey(userId: number, storageKey: string
   if (!db) throw new Error("Database is unavailable.");
   const result = await db.select({ id: evidenceDocuments.id }).from(evidenceDocuments).where(and(eq(evidenceDocuments.userId, userId), eq(evidenceDocuments.storageKey, storageKey), isNull(evidenceDocuments.deletedAt))).limit(1);
   return result[0] ?? null;
+}
+
+export async function countAnalysesForUser(userId: number) {
+  const db = await getDb();
+  if (!db) return 0;
+  const rows = await db.select({ id: evidenceAnalyses.id }).from(evidenceAnalyses).where(eq(evidenceAnalyses.userId, userId));
+  return rows.length;
+}
+
+// Records a commercial-interest signal (e.g. "pro_interest") for a user.
+// Idempotent by design: the unique index on (userId, eventType) means a
+// second call for the same user and event type is a harmless no-op rather
+// than a duplicate row or a thrown error -- the caller doesn't need to
+// check for an existing record first, and a race between two near-
+// simultaneous clicks can't create two rows either.
+export async function recordCommercialEvent(args: { userId: number; eventType: string; analysesCompletedAtTimeOfInterest: number; objective?: string | null; source?: string | null }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is unavailable.");
+  try {
+    await db.insert(commercialEvents).values({
+      userId: args.userId,
+      eventType: args.eventType,
+      analysesCompletedAtTimeOfInterest: args.analysesCompletedAtTimeOfInterest,
+      objective: args.objective ?? null,
+      source: args.source ?? null,
+    });
+  } catch (error) {
+    const isDuplicate = (error as { code?: string; errno?: number })?.code === "ER_DUP_ENTRY" || (error as { code?: string; errno?: number })?.errno === 1062;
+    if (!isDuplicate) throw error;
+  }
+}
+
+// Admin-only read: every commercial-interest event, newest first, joined
+// with the minimal user fields needed to identify who expressed interest.
+export async function listCommercialEvents(eventType: string) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({
+      id: commercialEvents.id,
+      userId: commercialEvents.userId,
+      email: users.email,
+      name: users.name,
+      analysesCompletedAtTimeOfInterest: commercialEvents.analysesCompletedAtTimeOfInterest,
+      objective: commercialEvents.objective,
+      source: commercialEvents.source,
+      createdAt: commercialEvents.createdAt,
+    })
+    .from(commercialEvents)
+    .innerJoin(users, eq(users.id, commercialEvents.userId))
+    .where(eq(commercialEvents.eventType, eventType))
+    .orderBy(desc(commercialEvents.createdAt));
 }
