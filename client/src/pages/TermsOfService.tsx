@@ -1,14 +1,10 @@
 import { LegalLayout, LegalSection } from "@/components/LegalLayout";
 
-// See the matching note in PrivacyPolicy.tsx -- update once Companies
-// House confirms registration.
-const COMPANY_NUMBER = "[company number pending -- registration in progress]";
-
 export default function TermsOfService() {
   return (
-    <LegalLayout title="Terms of Service" updated="23 August 2026">
+    <LegalLayout title="Terms of Service" updated="25 August 2026">
       <LegalSection title="Who these terms are with">
-        <p>Evidence Review (provemycv.com) ("the Service") is operated by Americ CI Ltd, a company registered in England and Wales (company number: {COMPANY_NUMBER}) ("we", "us", "our"). By using the Service, you agree to these terms. If you don't agree, please don't use the Service.</p>
+        <p>ProveMyCV (provemycv.com) ("the Service") is currently operated by Eric Ndungu, trading as an individual/sole trader based in England. In these terms, "we", "us", and "our" refer to Eric Ndungu. If this changes to a registered company in future, these terms will be updated to reflect that. By using the Service, you agree to these terms. If you don't agree, please don't use the Service.</p>
       </LegalSection>
 
       <LegalSection title="What the Service does">

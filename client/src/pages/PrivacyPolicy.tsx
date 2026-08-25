@@ -1,18 +1,10 @@
 import { LegalLayout, LegalSection } from "@/components/LegalLayout";
 
-// Operator details are provisional: Americ CI Ltd is in the process of
-// being registered at Companies House. Until that registration is
-// confirmed, presenting it here as an existing limited company would be
-// inaccurate -- swap in the company number the moment registration
-// completes (Companies House House > company number, format e.g.
-// "12345678"), and this note can come out.
-const COMPANY_NUMBER = "[company number pending -- registration in progress]";
-
 export default function PrivacyPolicy() {
   return (
-    <LegalLayout title="Privacy Policy" updated="23 August 2026">
+    <LegalLayout title="Privacy Policy" updated="25 August 2026">
       <LegalSection title="Who we are">
-        <p>Evidence Review (provemycv.com) is operated by Americ CI Ltd, a company registered in England and Wales (company number: {COMPANY_NUMBER}). In this policy, "we", "us", and "our" refer to Americ CI Ltd.</p>
+        <p>ProveMyCV (provemycv.com) is currently operated by Eric Ndungu, trading as an individual/sole trader based in England. In this policy, "we", "us", and "our" refer to Eric Ndungu. If this changes to a registered company in future, this policy will be updated to reflect that.</p>
         <p>Contact for any privacy question, or to exercise any of the rights below: <a href="mailto:privacy@provemycv.com" className="font-medium text-primary underline underline-offset-4">privacy@provemycv.com</a>.</p>
       </LegalSection>
 
@@ -40,7 +32,7 @@ export default function PrivacyPolicy() {
       </LegalSection>
 
       <LegalSection title="Automated processing">
-        <p>The analysis itself is generated automatically, by an AI model. It's decision support for your own reference — it does not make any decision about you, and nobody at Americ CI Ltd or any third party uses it to make an employment, HR, legal, or any other decision about you. It is not automated decision-making within the meaning of UK GDPR Article 22. As with any AI-generated output, it can be incomplete or mistaken; see the disclaimer shown throughout the app.</p>
+        <p>The analysis itself is generated automatically, by an AI model. It's decision support for your own reference — it does not make any decision about you, and neither we nor any third party uses it to make an employment, HR, legal, or any other decision about you. It is not automated decision-making within the meaning of UK GDPR Article 22. As with any AI-generated output, it can be incomplete or mistaken; see the disclaimer shown throughout the app.</p>
       </LegalSection>
 
       <LegalSection title="How long we keep it">
