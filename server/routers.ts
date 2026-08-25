@@ -11,7 +11,7 @@ import {
   extractedEvidence,
   targetRequirements,
 } from "../drizzle/schema";
-import { createUser, deleteAllSessionsForUser, deleteUserAccount, getDb, getDocumentStorageKeysForUser, getTargetDocument, getUserByEmail, getWorkspace, markPasswordResetTokenUsed, softDeleteDocument, touchUserLastSignedIn, updateUserPassword } from "./db";
+import { countAnalysesForUser, createUser, deleteAllSessionsForUser, deleteUserAccount, getDb, getDocumentStorageKeysForUser, getTargetDocument, getUserByEmail, getWorkspace, listCommercialEvents, markPasswordResetTokenUsed, recordCommercialEvent, softDeleteDocument, touchUserLastSignedIn, updateUserPassword } from "./db";
 import { DEMO_LABEL, demoAssessments, demoContradictions, demoCurrentRole, demoCurrentRoleResponsibilities, demoDocuments, demoEvidence, demoObjectiveReports, demoProfile, demoRequirements, demoTarget } from "./demoData";
 import { analyseAnnualAppraisal, analyseJobEvaluation, AppraisalGenerationError, detectPlainTextConflicts, extractEvidenceItems, extractRequirements, locationForParagraph, mapEvidenceToRequirements, MappingDraft, matchesClaimedFileType, paragraphize, parseEvidenceFile } from "./evidenceEngine";
 import { storageDelete, storagePut } from "./storage";
@@ -20,10 +20,15 @@ import { clearSessionCookie, createPasswordResetToken, createSession, destroySes
 import { sendPasswordResetEmail } from "./_core/email";
 import { parse as parseCookieHeader } from "cookie";
 import { systemRouter } from "./_core/systemRouter";
-import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
+import { adminProcedure, protectedProcedure, publicProcedure, router } from "./_core/trpc";
 
 const disclaimer = "This tool analyses supplied professional evidence and provides decision support only. It does not determine employment eligibility, banding/grading decisions, legal rights, job-evaluation outcomes, or professional competence for any profession.";
 const objectiveSchema = z.enum(["A", "B", "C"]);
+// A commercial-interest signal (e.g. clicking "Yes, let me know" on the
+// Pro-interest dialog). Its own constant string, not shared with anything
+// else, so a future second signal type is just a new string value, not a
+// schema change.
+const PRO_INTEREST_EVENT_TYPE = "pro_interest";
 const guestAnalysisSchema = z.object({
   currentRole: z.string().min(2).max(255).optional(),
   profession: z.string().min(2).max(255).optional(),
@@ -520,6 +525,35 @@ export const appRouter = router({
       const [document] = await db.select().from(evidenceDocuments).where(and(eq(evidenceDocuments.userId, ctx.user.id), eq(evidenceDocuments.id, input.id))).limit(1);
       if (!document) throw new TRPCError({ code: "NOT_FOUND", message: "Document not found." });
       return document;
+    }),
+  }),
+  // Records genuine demand for the (not yet built) Pro tier -- no payment
+  // processing here at all, just a server-side signal of interest. See the
+  // Pro-interest dialog in Home.tsx for the only place this is triggered
+  // from.
+  commercial: router({
+    recordProInterest: protectedProcedure.input(z.object({
+      objective: objectiveSchema.optional(),
+      source: z.string().max(60).optional(),
+    })).mutation(async ({ ctx, input }) => {
+      // The analysis count is read fresh from the database here, never
+      // taken from the client -- this number is the whole point of
+      // recording the event (how much value had they already gotten before
+      // saying they'd pay), so it has to be something the user can't
+      // influence by what they send.
+      const analysesCompletedAtTimeOfInterest = await countAnalysesForUser(ctx.user.id);
+      await recordCommercialEvent({
+        userId: ctx.user.id,
+        eventType: PRO_INTEREST_EVENT_TYPE,
+        analysesCompletedAtTimeOfInterest,
+        objective: input.objective ?? null,
+        source: input.source ?? null,
+      });
+      return { recorded: true } as const;
+    }),
+    listProInterest: adminProcedure.query(async () => {
+      const events = await listCommercialEvents(PRO_INTEREST_EVENT_TYPE);
+      return { total: events.length, events };
     }),
   }),
 });

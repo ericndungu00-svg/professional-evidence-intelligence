@@ -149,6 +149,28 @@ export const evidenceContradictions = mysqlTable("evidenceContradictions", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
+// Records a single commercial-interest signal from a signed-in user (e.g.
+// clicking "Yes, let me know" on the Pro-interest dialog) -- deliberately
+// its own small table rather than a column on `users`, so a future second
+// event type doesn't need a schema change, just a new `eventType` value.
+// The unique index makes a repeat click of the same event type a no-op at
+// the database level, rather than relying on the client to only ask once.
+export const commercialEvents = mysqlTable(
+  "commercialEvents",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId").notNull().references(() => users.id),
+    eventType: varchar("eventType", { length: 40 }).notNull(),
+    // Computed server-side from the user's real evidenceAnalyses count at
+    // the moment of the event -- never trust a client-supplied number here.
+    analysesCompletedAtTimeOfInterest: int("analysesCompletedAtTimeOfInterest").notNull(),
+    objective: varchar("objective", { length: 10 }),
+    source: varchar("source", { length: 60 }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [uniqueIndex("commercial_events_user_type_unique").on(table.userId, table.eventType)],
+);
+
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 export type Session = typeof sessions.$inferSelect;
@@ -156,3 +178,4 @@ export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
 export type EvidenceDocument = typeof evidenceDocuments.$inferSelect;
 export type TargetRequirement = typeof targetRequirements.$inferSelect;
 export type ExtractedEvidence = typeof extractedEvidence.$inferSelect;
+export type CommercialEvent = typeof commercialEvents.$inferSelect;
