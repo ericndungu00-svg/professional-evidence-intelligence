@@ -23,3 +23,23 @@ export async function sendPasswordResetEmail(to: string, resetUrl: string): Prom
     throw new Error(`Resend API error: ${error.name} -- ${error.message}`);
   }
 }
+
+// Verification is non-blocking (see the schema comment on
+// users.emailVerified), so unlike sendPasswordResetEmail this is allowed to
+// fail without threatening account access -- callers log the failure and
+// move on rather than needing to hide it behind a generic response.
+export async function sendVerificationEmail(to: string, verifyUrl: string): Promise<void> {
+  if (!resend) {
+    throw new Error("RESEND_API_KEY is not configured -- cannot send verification email.");
+  }
+  const { error } = await resend.emails.send({
+    from: ENV.resendFromEmail,
+    to,
+    subject: "Confirm your email address",
+    html: `<p>Welcome to ProveMyCV. Please confirm this is your email address:</p><p><a href="${verifyUrl}">Confirm my email</a></p><p>This link expires in 7 days. You can keep using your account either way -- this just confirms we can reach you.</p>`,
+    text: `Welcome to ProveMyCV. Please confirm this is your email address:\n\nConfirm my email: ${verifyUrl}\n\nThis link expires in 7 days. You can keep using your account either way -- this just confirms we can reach you.`,
+  });
+  if (error) {
+    throw new Error(`Resend API error: ${error.name} -- ${error.message}`);
+  }
+}

@@ -14,7 +14,7 @@ import { AuthDialog } from "@/components/AuthDialog";
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Link } from "wouter";
 import { trpc } from "@/lib/trpc";
-import { AlertTriangle, ArrowRight, BookOpenText, CheckCircle2, ChevronRight, CircleAlert, FileText, FolderOpen, Landmark, Loader2, LockKeyhole, Menu, Plus, Printer, Scale, SearchCheck, ShieldCheck, Sparkles, Target, Trash2, Upload, X } from "lucide-react";
+import { AlertTriangle, ArrowRight, BookOpenText, CheckCircle2, ChevronRight, CircleAlert, FileText, FolderOpen, Landmark, Loader2, LockKeyhole, Mail, Menu, Plus, Printer, Scale, SearchCheck, ShieldCheck, Sparkles, Target, Trash2, Upload, X } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -83,7 +83,7 @@ function validateUploadFile(file: File): string | null {
 function canonicalAssessment(value: string) { return ({ demonstrated: "directly_evidenced", partial: "indirectly_relevantly_evidenced", unsupported: "contradicted" } as Record<string, string>)[value] ?? value; }
 
 export default function Home() {
-  const { user, loading: authLoading, isAuthenticated, logout, deleteAccount, deleteAccountPending } = useAuth();
+  const { user, loading: authLoading, isAuthenticated, logout, deleteAccount, deleteAccountPending, resendVerificationEmail, resendVerificationEmailPending } = useAuth();
   const demoQuery = trpc.demo.workspace.useQuery();
   const workspaceQuery = trpc.evidence.workspace.useQuery(undefined, { enabled: isAuthenticated });
   const utils = trpc.useUtils();
@@ -95,6 +95,7 @@ export default function Home() {
   const [guestOpen, setGuestOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
   const [proInterestOpen, setProInterestOpen] = useState(false);
+  const [verifyBannerDismissed, setVerifyBannerDismissed] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [guestWorkspace, setGuestWorkspace] = useState<any>(null);
   const [entryDismissed, setEntryDismissed] = useState(false);
@@ -211,6 +212,14 @@ export default function Home() {
   const recordProInterest = trpc.commercial.recordProInterest.useMutation({
     onError: error => toast.error(error.message),
   });
+  async function handleResendVerification() {
+    try {
+      const result = await resendVerificationEmail();
+      toast.success(result.alreadyVerified ? "This email is already verified." : "Verification email sent — check your inbox.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not send the verification email.");
+    }
+  }
   // The analysis endpoints kick off a background job and return immediately
   // (rather than blocking the request on the full LLM pipeline, which can
   // exceed platform/proxy timeouts on longer submissions) — these mutations
@@ -489,6 +498,14 @@ export default function Home() {
         </div>
 
         <div className={`mb-6 flex gap-3 rounded-lg border border-primary/15 bg-secondary/55 px-4 py-3 text-sm text-secondary-foreground ${isResultsScreen ? "items-start" : "items-center"}`}><ShieldCheck className={`size-5 shrink-0 ${isResultsScreen ? "mt-0.5" : ""}`} />{isResultsScreen ? <p><strong>Decision support, not a determination.</strong> This tool analyses supplied professional evidence only. It does not determine employment eligibility, banding/grading decisions, legal rights, job-evaluation outcomes, or professional competence for any profession.</p> : <p><strong>Decision support, not a determination.</strong></p>}{isResultsScreen && <Button variant="outline" size="sm" onClick={() => window.print()} className="ml-auto shrink-0 print:hidden"><Printer className="size-4" />Print report</Button>}</div>
+
+        {/* Non-blocking by design (see the emailVerified schema comment) --
+            the account already works fully without this; it's a nudge, not
+            a gate, and dismissing it here is purely local UI state that
+            resets on reload rather than anything persisted, so it comes
+            back to remind them again until the address is actually
+            confirmed. */}
+        {isAuthenticated && !isGuest && user?.emailVerified === "no" && !verifyBannerDismissed && <div className="mb-6 flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"><Mail className="size-5 shrink-0" /><p className="flex-1">Please confirm your email address ({user?.email}) so you can always get back into your account.</p><Button size="sm" variant="outline" className="shrink-0 border-amber-300 bg-background" onClick={handleResendVerification} disabled={resendVerificationEmailPending}>{resendVerificationEmailPending && <Loader2 className="animate-spin" />}Resend email</Button><Button size="icon" variant="ghost" className="size-8 shrink-0 text-amber-900 hover:bg-amber-100" onClick={() => setVerifyBannerDismissed(true)} aria-label="Dismiss"><X className="size-4" /></Button></div>}
 
         {isFirstLoad ? <FirstLoadEntry onStart={() => {
           // isFirstLoad guarantees !isAuthenticated (see its own comment) --
