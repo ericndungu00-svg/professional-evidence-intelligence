@@ -444,6 +444,7 @@ export default function Home() {
             <HeaderNavLink label="Documents" active={activeSection === "library" && !isFirstLoad && !showDashboard} onClick={() => navigateTo("library")} />
             <HeaderNavLink label="Results" active={activeSection === "objective-summary" && !isFirstLoad && !showDashboard} onClick={() => navigateTo("objective-summary")} />
             <HeaderNavLink label="How this works" active={activeSection === "safety" && !isFirstLoad && !showDashboard} onClick={() => navigateTo("safety")} />
+            <Link href="/contact" className="rounded-md px-2.5 py-2 text-sm font-bold text-foreground/85 transition-colors hover:bg-accent hover:text-accent-foreground xl:px-3.5">Contact</Link>
           </nav>
 
           <div className="flex items-center gap-2">
@@ -473,6 +474,7 @@ export default function Home() {
                   <MobileNavLink label="Documents" icon={FolderOpen} active={activeSection === "library" && !isFirstLoad && !showDashboard} onClick={() => { navigateTo("library"); setMobileNavOpen(false); }} />
                   <MobileNavLink label="Results" icon={BookOpenText} active={activeSection === "objective-summary" && !isFirstLoad && !showDashboard} onClick={() => { navigateTo("objective-summary"); setMobileNavOpen(false); }} />
                   <MobileNavLink label="How this works" icon={ShieldCheck} active={activeSection === "safety" && !isFirstLoad && !showDashboard} onClick={() => { navigateTo("safety"); setMobileNavOpen(false); }} />
+                  <Link href="/contact" onClick={() => setMobileNavOpen(false)} className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-base font-medium text-foreground/80 transition-colors hover:bg-accent hover:text-accent-foreground"><Mail className="size-4.5" />Contact</Link>
                 </nav>
                 <SheetFooter className="border-t">
                   {isAuthenticated ? <>
@@ -539,7 +541,7 @@ export default function Home() {
         </div></>}
       </main>
 
-      <div className="mt-auto border-t border-primary/20 bg-primary px-4 py-3 text-center text-[11px] leading-5 text-primary-foreground"><p>This tool provides decision support from supplied evidence only. It does not determine employment eligibility, banding/grading decisions, legal rights, job-evaluation outcomes, or professional competence for any profession.</p><p className="mt-1 text-primary-foreground/70"><Link href="/privacy" className="underline-offset-2 hover:underline">Privacy</Link><span className="mx-2">·</span><Link href="/terms" className="underline-offset-2 hover:underline">Terms</Link><span className="mx-2">·</span><a href="mailto:hello@provemycv.com" className="underline-offset-2 hover:underline">Contact</a></p></div>
+      <div className="mt-auto border-t border-primary/20 bg-primary px-4 py-3 text-center text-[11px] leading-5 text-primary-foreground"><p>This tool provides decision support from supplied evidence only. It does not determine employment eligibility, banding/grading decisions, legal rights, job-evaluation outcomes, or professional competence for any profession.</p><p className="mt-1 text-primary-foreground/70"><Link href="/privacy" className="underline-offset-2 hover:underline">Privacy</Link><span className="mx-2">·</span><Link href="/terms" className="underline-offset-2 hover:underline">Terms</Link><span className="mx-2">·</span><Link href="/contact" className="underline-offset-2 hover:underline">Contact</Link></p></div>
       {selectedSource?.evidence && <SourcePanel evidence={selectedSource.evidence} document={selectedSource.document} onClose={() => setSelectedEvidenceId(null)} />}
       <GuestAnalysisDialog open={guestOpen} onOpenChange={setGuestOpen} onSubmit={data => guestAnalysis.mutate(data)} pending={isGuestAnalysing} />
       <AuthDialog open={authOpen} onOpenChange={setAuthOpen} />
