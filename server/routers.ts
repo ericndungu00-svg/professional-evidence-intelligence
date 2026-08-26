@@ -11,13 +11,13 @@ import {
   extractedEvidence,
   targetRequirements,
 } from "../drizzle/schema";
-import { countAnalysesForUser, createUser, deleteAllSessionsForUser, deleteUserAccount, getDb, getDocumentStorageKeysForUser, getTargetDocument, getUserByEmail, getUserById, getWorkspace, listCommercialEvents, markEmailVerificationTokenUsed, markPasswordResetTokenUsed, recordCommercialEvent, setUserEmailVerified, softDeleteDocument, touchUserLastSignedIn, updateUserPassword } from "./db";
+import { countAnalysesForUser, createContactMessage, createUser, deleteAllSessionsForUser, deleteUserAccount, getDb, getDocumentStorageKeysForUser, getTargetDocument, getUserByEmail, getUserById, getWorkspace, listCommercialEvents, listContactMessages, markEmailVerificationTokenUsed, markPasswordResetTokenUsed, recordCommercialEvent, setUserEmailVerified, softDeleteDocument, touchUserLastSignedIn, updateUserPassword } from "./db";
 import { DEMO_LABEL, demoAssessments, demoContradictions, demoCurrentRole, demoCurrentRoleResponsibilities, demoDocuments, demoEvidence, demoObjectiveReports, demoProfile, demoRequirements, demoTarget } from "./demoData";
 import { analyseAnnualAppraisal, analyseJobEvaluation, AppraisalGenerationError, detectPlainTextConflicts, extractEvidenceItems, extractRequirements, locationForParagraph, mapEvidenceToRequirements, MappingDraft, matchesClaimedFileType, paragraphize, parseEvidenceFile } from "./evidenceEngine";
 import { storageDelete, storagePut } from "./storage";
 import { COOKIE_NAME } from "@shared/const";
 import { clearSessionCookie, createEmailVerificationToken, createPasswordResetToken, createSession, destroySessionToken, getUserForEmailVerificationToken, getUserForPasswordResetToken, hashPassword, sanitizeUser, setSessionCookie, verifyPassword } from "./_core/auth";
-import { sendPasswordResetEmail, sendVerificationEmail } from "./_core/email";
+import { sendContactNotificationEmail, sendPasswordResetEmail, sendVerificationEmail } from "./_core/email";
 import { parse as parseCookieHeader } from "cookie";
 import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, protectedProcedure, publicProcedure, router } from "./_core/trpc";
@@ -589,6 +589,30 @@ export const appRouter = router({
     listProInterest: adminProcedure.query(async () => {
       const events = await listCommercialEvents(PRO_INTEREST_EVENT_TYPE);
       return { total: events.length, events };
+    }),
+  }),
+  // The Contact page's message form -- public (no account needed, matching
+  // the rest of the product) and rate-limited alongside the other
+  // sensitive procedures since it triggers a real Resend send per
+  // submission. The message is stored before the email is attempted, so a
+  // submission always persists even if that send fails.
+  contact: router({
+    send: publicProcedure.input(z.object({
+      name: z.string().trim().max(120).optional(),
+      email: z.string().trim().toLowerCase().email().max(320),
+      message: z.string().trim().min(1).max(5000),
+    })).mutation(async ({ input }) => {
+      await createContactMessage({ name: input.name || null, email: input.email, message: input.message });
+      try {
+        await sendContactNotificationEmail({ name: input.name ?? null, email: input.email, message: input.message });
+      } catch (error) {
+        console.error("[contact.send] failed to send notification email:", error);
+      }
+      return { sent: true } as const;
+    }),
+    list: adminProcedure.query(async () => {
+      const messages = await listContactMessages();
+      return { total: messages.length, messages };
     }),
   }),
 });

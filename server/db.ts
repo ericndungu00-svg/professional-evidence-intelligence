@@ -2,6 +2,7 @@ import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   commercialEvents,
+  contactMessages,
   criterionAssessments,
   emailVerificationTokens,
   evidenceAnalyses,
@@ -337,4 +338,20 @@ export async function listCommercialEvents(eventType: string) {
     .innerJoin(users, eq(users.id, commercialEvents.userId))
     .where(eq(commercialEvents.eventType, eventType))
     .orderBy(desc(commercialEvents.createdAt));
+}
+
+// Stores a Contact-page submission. Called before the notification email
+// is attempted, so a message is never lost even if that send fails --
+// this is the durable record of what was submitted.
+export async function createContactMessage(args: { name: string | null; email: string; message: string }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is unavailable.");
+  await db.insert(contactMessages).values({ name: args.name, email: args.email, message: args.message });
+}
+
+// Admin-only read: every contact-form submission, newest first.
+export async function listContactMessages() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(contactMessages).orderBy(desc(contactMessages.createdAt));
 }
