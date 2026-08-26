@@ -1,7 +1,7 @@
 import { SearchCheck } from "lucide-react";
 import { Link, useLocation } from "wouter";
 
-export function LegalLayout({ title, updated, children }: { title: string; updated: string; children: React.ReactNode }) {
+export function LegalLayout({ title, updated, eyebrow = "Legal", children }: { title: string; updated?: string; eyebrow?: string; children: React.ReactNode }) {
   const [, setLocation] = useLocation();
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
@@ -14,14 +14,14 @@ export function LegalLayout({ title, updated, children }: { title: string; updat
           <nav className="flex items-center gap-4 text-sm font-medium text-muted-foreground">
             <Link href="/privacy" className="hover:text-foreground">Privacy</Link>
             <Link href="/terms" className="hover:text-foreground">Terms</Link>
-            <a href="mailto:hello@provemycv.com" className="hover:text-foreground">Contact</a>
+            <Link href="/contact" className="hover:text-foreground">Contact</Link>
           </nav>
         </div>
       </header>
       <main className="mx-auto w-full max-w-3xl flex-1 px-5 py-10">
-        <p className="font-mono text-[11px] font-bold uppercase tracking-[0.16em] text-primary">Legal</p>
+        <p className="font-mono text-[11px] font-bold uppercase tracking-[0.16em] text-primary">{eyebrow}</p>
         <h1 className="mt-2 font-serif text-3xl font-semibold tracking-tight">{title}</h1>
-        <p className="mt-2 text-sm text-muted-foreground">Last updated: {updated}</p>
+        {updated && <p className="mt-2 text-sm text-muted-foreground">Last updated: {updated}</p>}
         <div className="prose-legal mt-8 grid gap-6 text-sm leading-6 text-foreground/90">{children}</div>
       </main>
       <div className="border-t bg-primary px-4 py-3 text-center text-[11px] leading-5 text-primary-foreground">This tool provides decision support from supplied evidence only. It does not determine employment eligibility, banding/grading decisions, legal rights, job-evaluation outcomes, or professional competence for any profession.</div>
