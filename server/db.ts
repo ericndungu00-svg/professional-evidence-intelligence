@@ -3,6 +3,7 @@ import { drizzle } from "drizzle-orm/mysql2";
 import {
   commercialEvents,
   criterionAssessments,
+  emailVerificationTokens,
   evidenceAnalyses,
   evidenceContradictions,
   evidenceDocuments,
@@ -106,6 +107,31 @@ export async function updateUserPassword(userId: number, passwordHash: string) {
   const db = await getDb();
   if (!db) throw new Error("Database is unavailable.");
   await db.update(users).set({ passwordHash }).where(eq(users.id, userId));
+}
+
+export async function createEmailVerificationToken(values: { id: string; userId: number; expiresAt: Date }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is unavailable.");
+  await db.insert(emailVerificationTokens).values(values);
+}
+
+export async function getEmailVerificationToken(id: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(emailVerificationTokens).where(eq(emailVerificationTokens.id, id)).limit(1);
+  return result[0];
+}
+
+export async function markEmailVerificationTokenUsed(id: string) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(emailVerificationTokens).set({ usedAt: new Date() }).where(eq(emailVerificationTokens.id, id));
+}
+
+export async function setUserEmailVerified(userId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(users).set({ emailVerified: "yes" }).where(eq(users.id, userId));
 }
 
 export async function getWorkspace(userId: number) {
@@ -237,6 +263,7 @@ export async function deleteUserAccount(userId: number) {
   await db.delete(evidenceDocuments).where(eq(evidenceDocuments.userId, userId));
   await db.delete(evidenceProfiles).where(eq(evidenceProfiles.userId, userId));
   await db.delete(passwordResetTokens).where(eq(passwordResetTokens.userId, userId));
+  await db.delete(emailVerificationTokens).where(eq(emailVerificationTokens.userId, userId));
   await db.delete(sessions).where(eq(sessions.userId, userId));
   await db.delete(commercialEvents).where(eq(commercialEvents.userId, userId));
   await db.delete(users).where(eq(users.id, userId));

@@ -34,6 +34,12 @@ export function useAuth() {
     onSuccess: () => utils.auth.me.setData(undefined, null),
   });
 
+  const verifyEmailMutation = trpc.auth.verifyEmail.useMutation({
+    onSuccess: () => utils.auth.me.invalidate(),
+  });
+
+  const resendVerificationEmailMutation = trpc.auth.resendVerificationEmail.useMutation();
+
   const logout = useCallback(async () => {
     try {
       await logoutMutation.mutateAsync();
@@ -86,5 +92,11 @@ export function useAuth() {
     deleteAccount: deleteAccountMutation.mutateAsync,
     deleteAccountPending: deleteAccountMutation.isPending,
     deleteAccountError: deleteAccountMutation.error,
+    verifyEmail: verifyEmailMutation.mutateAsync,
+    verifyEmailPending: verifyEmailMutation.isPending,
+    verifyEmailError: verifyEmailMutation.error,
+    resendVerificationEmail: resendVerificationEmailMutation.mutateAsync,
+    resendVerificationEmailPending: resendVerificationEmailMutation.isPending,
+    resendVerificationEmailError: resendVerificationEmailMutation.error,
   };
 }

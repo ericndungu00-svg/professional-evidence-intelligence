@@ -64,6 +64,13 @@
       "when": 1787655992441,
       "tag": "0008_left_stick",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "5",
+      "when": 1787737639510,
+      "tag": "0009_clammy_killmonger",
+      "breakpoints": true
     }
   ]
 }

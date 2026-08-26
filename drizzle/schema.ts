@@ -16,6 +16,11 @@ export const users = mysqlTable("users", {
   passwordHash: varchar("passwordHash", { length: 255 }).notNull(),
   name: text("name"),
   role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
+  // Non-blocking by design: an unverified account works exactly the same as
+  // a verified one everywhere else in the app (see the dismissible banner
+  // in Home.tsx) -- this only exists so there's an actual record of whether
+  // anyone has ever proven they control the address they signed up with.
+  emailVerified: mysqlEnum("emailVerified", ["yes", "no"]).default("no").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
@@ -36,6 +41,17 @@ export const sessions = mysqlTable("sessions", {
 // can't be replayed as a valid reset link. usedAt makes each token
 // single-use even before it expires.
 export const passwordResetTokens = mysqlTable("passwordResetTokens", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  userId: int("userId").notNull().references(() => users.id),
+  expiresAt: timestamp("expiresAt").notNull(),
+  usedAt: timestamp("usedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+// Same shape as passwordResetTokens (see its own comment) -- a separate
+// table rather than reusing passwordResetTokens, so an unrelated password
+// reset can never accidentally satisfy email verification or vice versa.
+export const emailVerificationTokens = mysqlTable("emailVerificationTokens", {
   id: varchar("id", { length: 64 }).primaryKey(),
   userId: int("userId").notNull().references(() => users.id),
   expiresAt: timestamp("expiresAt").notNull(),
@@ -175,6 +191,7 @@ export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 export type Session = typeof sessions.$inferSelect;
 export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
+export type EmailVerificationToken = typeof emailVerificationTokens.$inferSelect;
 export type EvidenceDocument = typeof evidenceDocuments.$inferSelect;
 export type TargetRequirement = typeof targetRequirements.$inferSelect;
 export type ExtractedEvidence = typeof extractedEvidence.$inferSelect;

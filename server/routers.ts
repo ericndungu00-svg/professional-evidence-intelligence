@@ -11,13 +11,13 @@ import {
   extractedEvidence,
   targetRequirements,
 } from "../drizzle/schema";
-import { countAnalysesForUser, createUser, deleteAllSessionsForUser, deleteUserAccount, getDb, getDocumentStorageKeysForUser, getTargetDocument, getUserByEmail, getWorkspace, listCommercialEvents, markPasswordResetTokenUsed, recordCommercialEvent, softDeleteDocument, touchUserLastSignedIn, updateUserPassword } from "./db";
+import { countAnalysesForUser, createUser, deleteAllSessionsForUser, deleteUserAccount, getDb, getDocumentStorageKeysForUser, getTargetDocument, getUserByEmail, getUserById, getWorkspace, listCommercialEvents, markEmailVerificationTokenUsed, markPasswordResetTokenUsed, recordCommercialEvent, setUserEmailVerified, softDeleteDocument, touchUserLastSignedIn, updateUserPassword } from "./db";
 import { DEMO_LABEL, demoAssessments, demoContradictions, demoCurrentRole, demoCurrentRoleResponsibilities, demoDocuments, demoEvidence, demoObjectiveReports, demoProfile, demoRequirements, demoTarget } from "./demoData";
 import { analyseAnnualAppraisal, analyseJobEvaluation, AppraisalGenerationError, detectPlainTextConflicts, extractEvidenceItems, extractRequirements, locationForParagraph, mapEvidenceToRequirements, MappingDraft, matchesClaimedFileType, paragraphize, parseEvidenceFile } from "./evidenceEngine";
 import { storageDelete, storagePut } from "./storage";
 import { COOKIE_NAME } from "@shared/const";
-import { clearSessionCookie, createPasswordResetToken, createSession, destroySessionToken, getUserForPasswordResetToken, hashPassword, sanitizeUser, setSessionCookie, verifyPassword } from "./_core/auth";
-import { sendPasswordResetEmail } from "./_core/email";
+import { clearSessionCookie, createEmailVerificationToken, createPasswordResetToken, createSession, destroySessionToken, getUserForEmailVerificationToken, getUserForPasswordResetToken, hashPassword, sanitizeUser, setSessionCookie, verifyPassword } from "./_core/auth";
+import { sendPasswordResetEmail, sendVerificationEmail } from "./_core/email";
 import { parse as parseCookieHeader } from "cookie";
 import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, protectedProcedure, publicProcedure, router } from "./_core/trpc";
@@ -251,6 +251,17 @@ export const appRouter = router({
       const user = await createUser({ email: input.email, passwordHash, name: input.name ?? null });
       const { token, expiresAt } = await createSession(user.id);
       setSessionCookie(ctx.req, ctx.res, token, expiresAt);
+      // Verification is non-blocking (see the emailVerified schema
+      // comment) -- the account is already fully usable at this point, so
+      // a failure here (Resend down, bad address) is logged and swallowed
+      // rather than failing the signup the user is actively waiting on.
+      try {
+        const { token: verifyToken } = await createEmailVerificationToken(user.id);
+        const origin = `${ctx.req.protocol}://${ctx.req.get("host")}`;
+        await sendVerificationEmail(user.email, `${origin}/verify-email?token=${verifyToken}`);
+      } catch (error) {
+        console.error("[auth.signup] failed to create/send verification email:", error);
+      }
       return sanitizeUser(user);
     }),
     login: publicProcedure.input(z.object({
@@ -319,6 +330,30 @@ export const appRouter = router({
       const { token: sessionToken, expiresAt: sessionExpiresAt } = await createSession(result.user.id);
       setSessionCookie(ctx.req, ctx.res, sessionToken, sessionExpiresAt);
       return sanitizeUser(result.user);
+    }),
+    verifyEmail: publicProcedure.input(z.object({
+      token: z.string().min(1),
+    })).mutation(async ({ input }) => {
+      const invalidToken = new TRPCError({ code: "BAD_REQUEST", message: "This verification link is invalid or has expired. Request a new one from your account." });
+      const result = await getUserForEmailVerificationToken(input.token);
+      if (!result) throw invalidToken;
+      await setUserEmailVerified(result.user.id);
+      await markEmailVerificationTokenUsed(result.tokenId);
+      return { email: result.user.email } as const;
+    }),
+    // Behind protectedProcedure (must already be signed in as the account
+    // in question, unlike requestPasswordReset which is reachable by email
+    // address alone) but still rate-limited alongside it -- it's a real
+    // Resend API call per click, trivially spammable by repeat-clicking
+    // "Resend" otherwise.
+    resendVerificationEmail: protectedProcedure.mutation(async ({ ctx }) => {
+      const user = await getUserById(ctx.user.id);
+      if (!user) throw new TRPCError({ code: "NOT_FOUND", message: "Account not found." });
+      if (user.emailVerified === "yes") return { sent: false, alreadyVerified: true } as const;
+      const { token } = await createEmailVerificationToken(user.id);
+      const origin = `${ctx.req.protocol}://${ctx.req.get("host")}`;
+      await sendVerificationEmail(user.email, `${origin}/verify-email?token=${token}`);
+      return { sent: true, alreadyVerified: false } as const;
     }),
     // Password re-entry required, same reasoning as any other irreversible
     // account action gated behind re-authentication -- a hijacked but still
