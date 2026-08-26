@@ -14,6 +14,7 @@ export function LegalLayout({ title, updated, children }: { title: string; updat
           <nav className="flex items-center gap-4 text-sm font-medium text-muted-foreground">
             <Link href="/privacy" className="hover:text-foreground">Privacy</Link>
             <Link href="/terms" className="hover:text-foreground">Terms</Link>
+            <a href="mailto:privacy@provemycv.com" className="hover:text-foreground">Contact</a>
           </nav>
         </div>
       </header>
