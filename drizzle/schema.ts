@@ -187,6 +187,19 @@ export const commercialEvents = mysqlTable(
   table => [uniqueIndex("commercial_events_user_type_unique").on(table.userId, table.eventType)],
 );
 
+// A message sent from the public Contact page. Deliberately not tied to
+// `users` -- the form works for anyone, signed in or not, matching the
+// rest of the product's no-account-needed positioning. Stored durably so
+// a submission is never lost even if the best-effort notification email
+// (see contact.send in routers.ts) fails to send.
+export const contactMessages = mysqlTable("contactMessages", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 120 }),
+  email: varchar("email", { length: 320 }).notNull(),
+  message: text("message").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 export type Session = typeof sessions.$inferSelect;
@@ -196,3 +209,4 @@ export type EvidenceDocument = typeof evidenceDocuments.$inferSelect;
 export type TargetRequirement = typeof targetRequirements.$inferSelect;
 export type ExtractedEvidence = typeof extractedEvidence.$inferSelect;
 export type CommercialEvent = typeof commercialEvents.$inferSelect;
+export type ContactMessage = typeof contactMessages.$inferSelect;

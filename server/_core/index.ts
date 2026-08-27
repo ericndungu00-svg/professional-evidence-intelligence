@@ -23,7 +23,7 @@ import { ENV } from "./env";
 // comma-separated path segment (httpBatchLink), so this matches on procedure
 // name rather than the exact path -- a request touching any of these
 // procedures, batched or not, counts against the limit.
-const RATE_LIMITED_PROCEDURES = ["guest.startAnalyse", "evidence.runAnalysis", "auth.login", "auth.signup", "auth.requestPasswordReset", "auth.resetPassword", "auth.resendVerificationEmail", "auth.verifyEmail"];
+const RATE_LIMITED_PROCEDURES = ["guest.startAnalyse", "evidence.runAnalysis", "auth.login", "auth.signup", "auth.requestPasswordReset", "auth.resetPassword", "auth.resendVerificationEmail", "auth.verifyEmail", "contact.send"];
 
 function requestTouchesLimitedProcedure(req: Request): boolean {
   const procedurePath = req.path.slice(1); // strip the leading "/" left after the /api/trpc mount
