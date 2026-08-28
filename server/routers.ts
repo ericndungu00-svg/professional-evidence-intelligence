@@ -130,8 +130,8 @@ async function runGuestAnalysisJob(jobId: string, input: z.infer<typeof guestAna
     const evidenceParagraphs = paragraphize(input.evidenceText);
     const targetParagraphs = paragraphize(input.targetText);
     const [items, requirements] = await Promise.all([extractEvidenceItems(input.evidenceText), extractRequirements(input.targetText)]);
-    if (!items.length) throw new Error("No extractable evidence was found in the supplied evidence text.");
-    if (!requirements.length) throw new Error("No individual criteria were found in the target specification.");
+    if (!items.length) throw new Error("We couldn't find anything to check in the evidence you pasted — try adding more detail or a different document.");
+    if (!requirements.length) throw new Error("We couldn't find any requirements in the job description you pasted — try adding more detail or the full text.");
     const evidence = items.map((item, index) => ({
       id: index + 1,
       documentId: "guest-evidence",
@@ -515,9 +515,9 @@ export const appRouter = router({
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "The evidence library is temporarily unavailable." });
       const workspace = await getWorkspace(ctx.user.id);
       const target = await getTargetDocument(ctx.user.id);
-      if (input.objective === "A" && (!target || !workspace.requirements.length)) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Add a target specification with extractable criteria before running Objective A." });
-      if (input.objective === "C" && (!workspace.currentRoleDocument || !workspace.currentRoleResponsibilities.length)) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Add a current role description with extractable responsibilities before running Objective C." });
-      if (!workspace.evidence.length) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Add evidence documents with extractable text before analysing." });
+      if (input.objective === "A" && (!target || !workspace.requirements.length)) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Add the job description you're aiming for before running Objective A — we didn't find anything in it to check your evidence against." });
+      if (input.objective === "C" && (!workspace.currentRoleDocument || !workspace.currentRoleResponsibilities.length)) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Add your current role description before running Objective C — we didn't find anything in it to check your evidence against." });
+      if (!workspace.evidence.length) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Add some evidence first — your CV, an appraisal, anything like that. We didn't find any text to check yet." });
       const requirements = target ? workspace.requirements.filter(item => item.targetDocumentId === target.id) : [];
       const titles = { A: `Objective A promotion mapping — ${target?.title ?? "target specification"}`, B: "Objective B annual appraisal evidence summary", C: `Objective C job evaluation preparation — ${workspace.currentRoleDocument?.title ?? "current role description"}` };
       const result = await db.insert(evidenceAnalyses).values({ userId: ctx.user.id, profileId: workspace.profile?.id ?? null, targetDocumentId: target?.id ?? null, objective: input.objective, title: titles[input.objective], status: "processing" });
