@@ -50,26 +50,41 @@ export function GuestAnalysisDialog({ open, onOpenChange, onSubmit, pending }: P
             Paste in your evidence and the job description you're going for, and we'll show you how they match up. Nothing you enter here is saved anywhere.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={submit} className="grid gap-4 py-2">
-          <div className="grid gap-4 sm:grid-cols-3">
-            <Field label="Current role (optional)"><Input value={draft.currentRole} onChange={event => setDraft({ ...draft, currentRole: event.target.value })} /></Field>
-            <Field label="Profession (optional)"><Input value={draft.profession} onChange={event => setDraft({ ...draft, profession: event.target.value })} /></Field>
-            <Field label="Job you're aiming for (optional)"><Input value={draft.targetRole} onChange={event => setDraft({ ...draft, targetRole: event.target.value })} /></Field>
+        {pending ? (
+          // Real analysis takes 60-100s -- a first-time user submitting this
+          // and then watching their own filled-in form just sit there, with
+          // only a small spinner on the button, reads as "did that even
+          // work?" long before it's actually done. Swapping to an explicit
+          // waiting state with a time expectation is the fix; nothing here
+          // changes when the job actually finishes (still handled by the
+          // guestAnalysisStatusQuery effect in Home.tsx).
+          <div className="grid place-items-center gap-3 py-16 text-center">
+            <Loader2 className="size-8 animate-spin text-primary" />
+            <p className="font-serif text-xl font-semibold">Checking your evidence against the job description</p>
+            <p className="max-w-sm text-sm text-muted-foreground">This usually takes under a minute — we're comparing everything you pasted, line by line. This screen will update on its own.</p>
           </div>
-          <Field label="Your evidence">
-            <Textarea required rows={8} minLength={40} placeholder="Paste in a CV, appraisal, feedback, audit, QI report, CPD record, or anything similar. Use the original wording — that's what we'll check." value={draft.evidenceText} onChange={event => setDraft({ ...draft, evidenceText: event.target.value })} />
-          </Field>
-          <Field label="The job description">
-            <Textarea required rows={8} minLength={40} placeholder="Paste in the role specification, criteria, promotion framework, or whatever sets out what's needed." value={draft.targetText} onChange={event => setDraft({ ...draft, targetText: event.target.value })} />
-          </Field>
-          <Field label="Anything specific you want checked? (optional)">
-            <Textarea rows={3} placeholder="For example: I led a service-improvement project. We'll check this against your pasted evidence." value={draft.ownClaims} onChange={event => setDraft({ ...draft, ownClaims: event.target.value })} />
-          </Field>
-          <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
-            <p className="max-w-md text-xs leading-5 text-muted-foreground">This is temporary and won't be saved. <strong>Sign in only if you want to keep it</strong> — a private library, uploaded files, your profile, and your results.</p>
-            <Button type="submit" disabled={pending}>{pending && <Loader2 className="animate-spin" />}See how I match up</Button>
-          </div>
-        </form>
+        ) : (
+          <form onSubmit={submit} className="grid gap-4 py-2">
+            <div className="grid gap-4 sm:grid-cols-3">
+              <Field label="Current role (optional)"><Input value={draft.currentRole} onChange={event => setDraft({ ...draft, currentRole: event.target.value })} /></Field>
+              <Field label="Profession (optional)"><Input value={draft.profession} onChange={event => setDraft({ ...draft, profession: event.target.value })} /></Field>
+              <Field label="Job you're aiming for (optional)"><Input value={draft.targetRole} onChange={event => setDraft({ ...draft, targetRole: event.target.value })} /></Field>
+            </div>
+            <Field label="Your evidence">
+              <Textarea required rows={8} minLength={40} placeholder="Paste in a CV, appraisal, feedback, audit, QI report, CPD record, or anything similar. Use the original wording — that's what we'll check." value={draft.evidenceText} onChange={event => setDraft({ ...draft, evidenceText: event.target.value })} />
+            </Field>
+            <Field label="The job description">
+              <Textarea required rows={8} minLength={40} placeholder="Paste in the role specification, criteria, promotion framework, or whatever sets out what's needed." value={draft.targetText} onChange={event => setDraft({ ...draft, targetText: event.target.value })} />
+            </Field>
+            <Field label="Anything specific you want checked? (optional)">
+              <Textarea rows={3} placeholder="For example: I led a service-improvement project. We'll check this against your pasted evidence." value={draft.ownClaims} onChange={event => setDraft({ ...draft, ownClaims: event.target.value })} />
+            </Field>
+            <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="max-w-md text-xs leading-5 text-muted-foreground">This is temporary and won't be saved. <strong>Sign in only if you want to keep it</strong> — a private library, uploaded files, your profile, and your results.</p>
+              <Button type="submit">See how I match up</Button>
+            </div>
+          </form>
+        )}
       </DialogContent>
     </Dialog>
   );
