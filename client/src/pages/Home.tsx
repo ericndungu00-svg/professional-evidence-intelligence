@@ -14,7 +14,7 @@ import { AuthDialog } from "@/components/AuthDialog";
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Link } from "wouter";
 import { trpc } from "@/lib/trpc";
-import { AlertTriangle, ArrowRight, BookOpenText, CheckCircle2, ChevronRight, CircleAlert, FileText, FolderOpen, Landmark, Loader2, LockKeyhole, Mail, Menu, Plus, Printer, Scale, SearchCheck, ShieldCheck, Sparkles, Target, Trash2, Upload, X } from "lucide-react";
+import { AlertTriangle, ArrowRight, BookOpenText, CheckCircle2, CircleAlert, FileText, FolderOpen, Landmark, Loader2, LockKeyhole, Mail, Menu, Plus, Printer, Scale, SearchCheck, ShieldCheck, Sparkles, Target, Trash2, Upload, X } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -449,6 +449,7 @@ export default function Home() {
           {/* Persistent global nav, desktop (>=768px): identical on every screen. */}
           <nav aria-label="Global" className="hidden items-center gap-1 md:flex xl:gap-2">
             <HeaderNavLink label="Start new" onClick={goHome} />
+            <HeaderNavLink label="Your strengths and gaps" active={activeSection === "evidence-map" && !isFirstLoad && !showDashboard} onClick={() => navigateTo("evidence-map")} />
             <HeaderNavLink label="Documents" active={activeSection === "library" && !isFirstLoad && !showDashboard} onClick={() => navigateTo("library")} />
             <HeaderNavLink label="Results" active={activeSection === "objective-summary" && !isFirstLoad && !showDashboard} onClick={() => navigateTo("objective-summary")} />
             <HeaderNavLink label="How this works" active={activeSection === "safety" && !isFirstLoad && !showDashboard} onClick={() => navigateTo("safety")} />
@@ -479,6 +480,7 @@ export default function Home() {
                 </SheetHeader>
                 <nav aria-label="Global" className="flex flex-1 flex-col gap-1 p-3">
                   <MobileNavLink label="Start new" icon={Sparkles} onClick={() => { goHome(); setMobileNavOpen(false); }} />
+                  <MobileNavLink label="Your strengths and gaps" icon={SearchCheck} active={activeSection === "evidence-map" && !isFirstLoad && !showDashboard} onClick={() => { navigateTo("evidence-map"); setMobileNavOpen(false); }} />
                   <MobileNavLink label="Documents" icon={FolderOpen} active={activeSection === "library" && !isFirstLoad && !showDashboard} onClick={() => { navigateTo("library"); setMobileNavOpen(false); }} />
                   <MobileNavLink label="Results" icon={BookOpenText} active={activeSection === "objective-summary" && !isFirstLoad && !showDashboard} onClick={() => { navigateTo("objective-summary"); setMobileNavOpen(false); }} />
                   <MobileNavLink label="How this works" icon={ShieldCheck} active={activeSection === "safety" && !isFirstLoad && !showDashboard} onClick={() => { navigateTo("safety"); setMobileNavOpen(false); }} />
@@ -533,8 +535,22 @@ export default function Home() {
           </>}
         </section>
 
-        <div className="mt-6 grid gap-6 xl:grid-cols-[240px_minmax(0,1fr)] print:block">
-          <aside className="xl:sticky xl:top-24 xl:h-fit print:hidden"><nav className="rounded-xl border bg-card p-2 shadow-sm"><NavButton active={activeSection === "evidence-map"} icon={SearchCheck} label="Your strengths and gaps" onClick={() => setActiveSection("evidence-map")} /><NavButton active={activeSection === "library"} icon={FolderOpen} label="Documents" onClick={() => navigateTo("library")} /><NavButton active={activeSection === "objective-summary"} icon={BookOpenText} label="Results" onClick={() => navigateTo("objective-summary")} /><NavButton active={activeSection === "safety"} icon={ShieldCheck} label="How this works" onClick={() => navigateTo("safety")} /></nav><div className="mt-4 rounded-xl border border-dashed bg-card p-4"><p className="font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">What you're working on</p><p className="mt-1 font-serif text-lg font-semibold">{objectives[objective].title}</p><p className="mt-1 text-xs leading-5 text-muted-foreground">{objectives[objective].label}</p></div></aside>
+        <div className="mt-6 print:block">
+          {/* Used to be a second nav system: an xl:-only sidebar duplicating
+              the header's Documents/Results/How this works links. That
+              redundancy -- the same destinations reachable two ways once
+              the viewport was wide enough -- was the concrete "hard to
+              navigate" complaint. The header (with "Your strengths and
+              gaps" now added alongside its existing links, see above) is
+              the one nav system at every breakpoint; this strip keeps only
+              the context info the sidebar had that the header didn't, and
+              shows it everywhere rather than just at xl:. */}
+          <div className="mb-5 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-dashed bg-card px-4 py-3 print:hidden">
+            <p className="font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">What you're working on</p>
+            <span className="hidden h-4 w-px bg-border sm:block" />
+            <p className="font-serif text-base font-semibold">{objectives[objective].title}</p>
+            <p className="text-xs text-muted-foreground">{objectives[objective].label}</p>
+          </div>
 
           <div className="min-w-0">
             {/* A genuinely fresh signed-in account (zero documents) used to
@@ -578,8 +594,6 @@ export default function Home() {
     </div>
   );
 }
-
-function NavButton({ active, icon: Icon, label, onClick }: { active: boolean; icon: typeof Target; label: string; onClick: () => void }) { return <button onClick={onClick} className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors ${active ? "bg-primary text-primary-foreground" : "text-foreground/75 hover:bg-accent hover:text-accent-foreground"}`}><Icon className="size-4" />{label}<ChevronRight className={`ml-auto size-4 ${active ? "opacity-100" : "opacity-0"}`} /></button>; }
 
 // The persistent global top bar's desktop link (>=768px).
 function HeaderNavLink({ label, active, onClick }: { label: string; active?: boolean; onClick: () => void }) { return <button type="button" onClick={onClick} className={`rounded-md px-2.5 py-2 text-sm font-bold transition-colors xl:px-3.5 ${active ? "bg-primary text-primary-foreground shadow-sm" : "text-foreground/85 hover:bg-accent hover:text-accent-foreground"}`}>{label}</button>; }
