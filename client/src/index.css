@@ -4,26 +4,26 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --background: oklch(0.978 0.005 100);
-  --foreground: oklch(0.23 0.025 252);
+  --background: oklch(0.977 0.008 289);
+  --foreground: oklch(0.205 0.02 285);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.23 0.025 252);
+  --card-foreground: oklch(0.205 0.02 285);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.23 0.025 252);
-  --primary: oklch(0.34 0.067 242);
-  --primary-foreground: oklch(0.985 0.002 100);
-  --secondary: oklch(0.948 0.012 160);
-  --secondary-foreground: oklch(0.28 0.045 158);
-  --muted: oklch(0.955 0.006 100);
-  --muted-foreground: oklch(0.49 0.02 252);
-  --accent: oklch(0.93 0.024 92);
-  --accent-foreground: oklch(0.27 0.04 75);
+  --popover-foreground: oklch(0.205 0.02 285);
+  --primary: oklch(0.511 0.262 276.97);
+  --primary-foreground: oklch(0.985 0.005 100);
+  --secondary: oklch(0.943 0.029 294.59);
+  --secondary-foreground: oklch(0.38 0.189 293.75);
+  --muted: oklch(0.965 0.012 285);
+  --muted-foreground: oklch(0.49 0.024 275);
+  --accent: oklch(0.955 0.02 280);
+  --accent-foreground: oklch(0.35 0.09 278);
   --destructive: oklch(0.55 0.18 25);
   --destructive-foreground: oklch(0.985 0.002 100);
-  --border: oklch(0.885 0.012 100);
-  --input: oklch(0.885 0.012 100);
-  --ring: oklch(0.44 0.07 242);
-  --radius: 0.75rem;
+  --border: oklch(0.89 0.014 285);
+  --input: oklch(0.89 0.014 285);
+  --ring: oklch(0.585 0.233 277.12);
+  --radius: 0.625rem;
 }
 
 @theme inline {
@@ -51,7 +51,7 @@
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
   --font-sans: "Manrope", sans-serif;
-  --font-serif: "Source Serif 4", Georgia, serif;
+  --font-serif: "Sora", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "DM Mono", monospace;
 }
 
@@ -59,7 +59,7 @@
 html { scroll-behavior: smooth; }
 body { background: var(--background); color: var(--foreground); font-family: "Manrope", sans-serif; }
 button, input, textarea, select { font: inherit; }
-.paper-grid { background-image: linear-gradient(to right, oklch(0.9 0.008 100 / 45%) 1px, transparent 1px), linear-gradient(to bottom, oklch(0.9 0.008 100 / 45%) 1px, transparent 1px); background-size: 28px 28px; }
-.report-table tbody tr { border-top: 1px solid oklch(0.91 0.01 100); }
-.report-table tbody tr:hover { background: oklch(0.975 0.008 100); }
+.paper-grid { background-image: linear-gradient(to right, oklch(0.9 0.012 289 / 45%) 1px, transparent 1px), linear-gradient(to bottom, oklch(0.9 0.012 289 / 45%) 1px, transparent 1px); background-size: 28px 28px; }
+.report-table tbody tr { border-top: 1px solid oklch(0.91 0.014 289); }
+.report-table tbody tr:hover { background: oklch(0.97 0.012 289); }
 @media (prefers-reduced-motion: no-preference) { .rise { animation: rise .35s cubic-bezier(0.23, 1, 0.32, 1) both; } @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } } }
