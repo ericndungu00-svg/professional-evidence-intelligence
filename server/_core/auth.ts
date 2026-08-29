@@ -43,7 +43,8 @@ export async function getUserForSessionToken(token: string | undefined): Promise
     return null;
   }
   const user = await db.getUserById(session.userId);
-  return user ?? null;
+  if (!user) return null;
+  return db.promoteUserToAdminIfOwner(user);
 }
 
 export async function destroySessionToken(token: string | undefined): Promise<void> {

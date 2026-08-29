@@ -51,6 +51,24 @@ export async function getUserById(id: number) {
   return result[0];
 }
 
+// createUser only ever decides role once, at signup -- if OWNER_EMAIL wasn't
+// set (or wasn't set correctly) on the deployment yet when the owner's own
+// account was first created, that account is stuck as role "user" forever,
+// since nothing else ever re-derives it. Confirmed live: this happened to
+// the actual site owner, whose account predated OWNER_EMAIL being set
+// correctly in the production environment, permanently locking them out of
+// /admin/pro-interest with no way to self-recover short of a manual DB
+// edit. Called on every session resolution (see getUserForSessionToken) so
+// the owner's account self-heals the moment the environment is correct,
+// without needing a fresh signup or a database fix.
+export async function promoteUserToAdminIfOwner<T extends { id: number; email: string; role: string }>(user: T): Promise<T> {
+  if (user.role === "admin" || !ENV.ownerEmail || user.email !== ENV.ownerEmail) return user;
+  const db = await getDb();
+  if (!db) return user;
+  await db.update(users).set({ role: "admin" }).where(eq(users.id, user.id));
+  return { ...user, role: "admin" };
+}
+
 export async function touchUserLastSignedIn(id: number) {
   const db = await getDb();
   if (!db) return;
