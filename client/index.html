@@ -10,6 +10,18 @@
     <title>Professional Evidence Intelligence</title>
   </head>
   <body>
+    <!-- This whole app is client-rendered -- the server sends an empty
+         #root and everything (including the real, visible PeerPush link
+         in the footer) only exists once React mounts. A crawler that
+         fetches raw HTML without running JavaScript -- e.g. PeerPush's
+         own verifier, confirmed live: it reported "No PeerPush badge
+         link found" even after the real link was live and visible in a
+         browser -- never sees any of that. This is the same link,
+         present in the initial HTML so it doesn't depend on JS
+         execution; visually hidden (not display:none, which some
+         crawlers themselves disregard as human-invisible) since the
+         real footer link already serves human visitors. -->
+    <a href="https://peerpush.com/p/provemycv" rel="noopener" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;">PeerPush</a>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
