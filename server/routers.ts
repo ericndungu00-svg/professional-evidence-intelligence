@@ -1,6 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { randomUUID } from "crypto";
 import { and, eq } from "drizzle-orm";
+import { nanoid } from "nanoid";
 import { z } from "zod";
 import {
   criterionAssessments,
@@ -11,7 +12,7 @@ import {
   extractedEvidence,
   targetRequirements,
 } from "../drizzle/schema";
-import { countAnalysesForUser, createContactMessage, createUser, deleteAllSessionsForUser, deleteUserAccount, getDb, getDocumentStorageKeysForUser, getTargetDocument, getUserByEmail, getUserById, getWorkspace, listCommercialEvents, listContactMessages, markEmailVerificationTokenUsed, markPasswordResetTokenUsed, recordCommercialEvent, setUserEmailVerified, softDeleteDocument, touchUserLastSignedIn, updateUserPassword } from "./db";
+import { countAnalysesForUser, createContactMessage, createSharedResult, createUser, deleteAllSessionsForUser, deleteUserAccount, getDb, getDocumentStorageKeysForUser, getSharedResultBySlug, getTargetDocument, getUserByEmail, getUserById, getWorkspace, listCommercialEvents, listContactMessages, markEmailVerificationTokenUsed, markPasswordResetTokenUsed, recordCommercialEvent, setUserEmailVerified, softDeleteDocument, touchUserLastSignedIn, updateUserPassword } from "./db";
 import { DEMO_LABEL, getDemoBundle } from "./demoData";
 import { analyseAnnualAppraisal, analyseJobEvaluation, AppraisalGenerationError, detectPlainTextConflicts, extractEvidenceItems, extractRequirements, locationForParagraph, mapEvidenceToRequirements, MappingDraft, matchesClaimedFileType, paragraphize, parseEvidenceFile } from "./evidenceEngine";
 import { storageDelete, storagePut } from "./storage";
@@ -412,6 +413,34 @@ export const appRouter = router({
       const job = guestJobs.get(input.jobId);
       if (!job) throw new TRPCError({ code: "NOT_FOUND", message: "This guest analysis session has expired or was not found. Please submit again." });
       return job;
+    }),
+    // Publishes a completed guest result to a public, permanent /results/:slug
+    // page. Deliberately reads the result from the server-side guestJobs
+    // entry rather than accepting one in the input -- an anonymous caller
+    // must have actually run a real analysis through this server first,
+    // otherwise this endpoint would let anyone publish arbitrary content on
+    // provemycv.com. This also means sharing only works while the job's
+    // 15-minute TTL window is still open (see GUEST_JOB_TTL_MS above) --
+    // acceptable since the "Make this shareable" action is only ever shown
+    // right after a guest's own result loads.
+    makeShareable: publicProcedure.input(z.object({ jobId: z.string().min(1) })).mutation(async ({ input }) => {
+      const job = guestJobs.get(input.jobId);
+      if (!job || job.status !== "complete") throw new TRPCError({ code: "NOT_FOUND", message: "This guest analysis has expired or is no longer available to share. Please run it again." });
+      const slug = nanoid(12);
+      await createSharedResult({ slug, resultData: job.result });
+      return { slug, url: `/results/${slug}` };
+    }),
+  }),
+  shared: router({
+    // Public, no-auth read of a previously shared guest result -- used by
+    // the client-side SharedResult page for hydration, and directly (no
+    // HTTP round-trip) by the crawlable /results/:slug Express route in
+    // server/_core/index.ts so the two never disagree on what a shared
+    // result contains.
+    getBySlug: publicProcedure.input(z.object({ slug: z.string().min(1) })).query(async ({ input }) => {
+      const row = await getSharedResultBySlug(input.slug);
+      if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "This shared result was not found." });
+      return { resultData: row.resultData, createdAt: row.createdAt };
     }),
   }),
   evidence: router({
