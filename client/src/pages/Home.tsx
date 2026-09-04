@@ -1,7 +1,7 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { GuestAnalysisDialog } from "@/components/GuestAnalysisDialog";
 import { AnalysisFailureAlert } from "@/components/AnalysisFailureAlert";
-import { EvidenceMap, sourceFor } from "@/components/EvidenceMap";
+import { EvidenceMap, SourcePanel, sourceFor } from "@/components/EvidenceMap";
 import { ObjectiveReports } from "@/components/ObjectiveReports";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,7 @@ import { AuthDialog } from "@/components/AuthDialog";
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Link } from "wouter";
 import { trpc } from "@/lib/trpc";
-import { AlertTriangle, ArrowRight, BookOpenText, CheckCircle2, CircleAlert, FileText, FolderOpen, Landmark, Loader2, LockKeyhole, Mail, Menu, Plus, Printer, Scale, SearchCheck, ShieldCheck, Sparkles, Target, Trash2, Upload, X } from "lucide-react";
+import { AlertTriangle, ArrowRight, BookOpenText, CheckCircle2, CircleAlert, Copy, FileText, FolderOpen, Landmark, Loader2, LockKeyhole, Mail, Menu, Plus, Printer, Scale, SearchCheck, Share2, ShieldCheck, Sparkles, Target, Trash2, Upload, X } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -115,6 +115,13 @@ export default function Home() {
   const [pickerExpanded, setPickerExpanded] = useState(false);
   const [analysisId, setAnalysisId] = useState<number | null>(null);
   const [guestJobId, setGuestJobId] = useState<string | null>(null);
+  // guestJobId itself is cleared back to null the moment a job completes
+  // (see the effect below) so isGuestAnalysing correctly stops showing a
+  // pending state -- this separate id survives that reset, so the "Make
+  // this shareable" action still has something to call guest.makeShareable
+  // with while the guest is looking at their own result.
+  const [lastGuestJobId, setLastGuestJobId] = useState<string | null>(null);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [profileDraft, setProfileDraft] = useState({ currentRole: "", profession: "", specialty: "", experience: "", currentLevel: "", targetRole: "", careerObjective: "", ownClaims: "" });
   const [uploadDraft, setUploadDraft] = useState({ title: "", documentType: "evidence" as "evidence" | "target" | "current_role", sourceKind: "CV", sourceText: "" });
   const [uploadFile, setUploadFile] = useState<File | null>(null);
@@ -268,6 +275,8 @@ export default function Home() {
     if (!job || job.status === "processing") return;
     if (job.status === "complete") {
       setGuestWorkspace(job.result);
+      setLastGuestJobId(guestJobId);
+      setShareUrl(null);
       setObjective("A");
       setActiveSection("evidence-map");
       setGuestOpen(false);
@@ -278,6 +287,10 @@ export default function Home() {
     setGuestJobId(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [guestAnalysisStatusQuery.data]);
+  const makeShareable = trpc.guest.makeShareable.useMutation({
+    onSuccess: data => setShareUrl(data.url),
+    onError: () => toast.error("This example has expired and can't be shared anymore — try running it again."),
+  });
   const isAnalysing = runAnalysis.isPending || analysisId !== null;
   const isGuestAnalysing = guestAnalysis.isPending || guestJobId !== null;
 
@@ -530,7 +543,7 @@ export default function Home() {
           setEntryDismissed(true);
         }} /> : showDashboard ? <ReturningUserDashboard workspace={active} onChooseObjective={(next: Objective) => { setDashboardDismissed(true); chooseObjective(next); }} onViewLibrary={() => { setDashboardDismissed(true); setActiveSection("library"); }} /> : <><section className="relative overflow-hidden rounded-xl border bg-card px-6 py-8 shadow-[0_12px_36px_-26px_rgba(14,32,50,.35)] lg:px-10 print:hidden">
           {isReturningWithHistory ? <div className="relative max-w-3xl"><p className="font-mono text-[11px] font-bold uppercase tracking-[.18em] text-primary">Welcome back</p><h1 className="mt-2 font-serif text-3xl font-semibold tracking-tight lg:text-4xl">{returningWelcomeMessage}</h1></div> : <>
-          <div className="relative max-w-4xl"><div className="mb-3 flex flex-wrap items-center gap-2"><span className="font-mono text-[11px] uppercase tracking-[0.14em] text-primary">About you</span>{isDemo && <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-800">Example data</Badge>}{isGuest && <Badge variant="outline" className="border-primary/30 bg-primary/5 text-primary">Not saved</Badge>}{isDemo && !isAuthenticated && <span className="flex items-center gap-1 text-xs text-muted-foreground">See a different example:{DEMO_SCENARIOS.filter(item => item.id !== demoScenario).map(item => <button key={item.id} type="button" onClick={() => setDemoScenario(item.id)} className="font-semibold text-primary underline underline-offset-4">{item.personName}</button>)}</span>}</div><h1 className="font-serif text-4xl font-semibold tracking-tight lg:text-5xl">{active?.profile?.currentRole ?? "Your details"}</h1>{active?.profile ? <p className="mt-2 max-w-3xl text-base text-muted-foreground">{`${active.profile.profession}${active.profile.specialty ? ` · ${active.profile.specialty}` : ""}${active.profile.experience ? ` · ${active.profile.experience}` : ""}`}</p> : !isAuthenticated ? <p className="mt-2 max-w-3xl text-base text-muted-foreground">Try it free, right now — no account needed. Sign in only if you want to save your results for later.</p> : null}<div className="mt-5 flex flex-wrap gap-2">{active?.profile?.targetRole && <Badge variant="secondary" className="font-medium">Aiming for: {active.profile.targetRole}</Badge>}{active?.profile?.currentLevel && <Badge variant="outline">Current level: {active.profile.currentLevel}</Badge>}{isDemo && <Badge variant="outline">{active?.personName ?? "Sarah Mwangi"}</Badge>}</div></div>
+          <div className="relative max-w-4xl"><div className="mb-3 flex flex-wrap items-center gap-2"><span className="font-mono text-[11px] uppercase tracking-[0.14em] text-primary">About you</span>{isDemo && <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-800">Example data</Badge>}{isGuest && <Badge variant="outline" className="border-primary/30 bg-primary/5 text-primary">Not saved</Badge>}{isGuest && <GuestShareControl shareUrl={shareUrl} pending={makeShareable.isPending} onShare={() => { if (lastGuestJobId) makeShareable.mutate({ jobId: lastGuestJobId }); }} />}{isDemo && !isAuthenticated &&<span className="flex items-center gap-1 text-xs text-muted-foreground">See a different example:{DEMO_SCENARIOS.filter(item => item.id !== demoScenario).map(item => <button key={item.id} type="button" onClick={() => setDemoScenario(item.id)} className="font-semibold text-primary underline underline-offset-4">{item.personName}</button>)}</span>}</div><h1 className="font-serif text-4xl font-semibold tracking-tight lg:text-5xl">{active?.profile?.currentRole ?? "Your details"}</h1>{active?.profile ? <p className="mt-2 max-w-3xl text-base text-muted-foreground">{`${active.profile.profession}${active.profile.specialty ? ` · ${active.profile.specialty}` : ""}${active.profile.experience ? ` · ${active.profile.experience}` : ""}`}</p> : !isAuthenticated ? <p className="mt-2 max-w-3xl text-base text-muted-foreground">Try it free, right now — no account needed. Sign in only if you want to save your results for later.</p> : null}<div className="mt-5 flex flex-wrap gap-2">{active?.profile?.targetRole && <Badge variant="secondary" className="font-medium">Aiming for: {active.profile.targetRole}</Badge>}{active?.profile?.currentLevel && <Badge variant="outline">Current level: {active.profile.currentLevel}</Badge>}{isDemo && <Badge variant="outline">{active?.personName ?? "Sarah Mwangi"}</Badge>}</div></div>
           <div className="relative mt-6 flex flex-wrap items-center gap-1.5">{[{ label: "About you", active: !!active?.profile }, { label: "Evidence", active: (active?.documents?.filter((document: any) => document.documentType === "evidence")?.length ?? 0) > 0 }, { label: "Job you want", active: !!target }, { label: "Results", active: (active?.assessments?.length ?? 0) > 0 }].map((step, index) => <span key={step.label} className="flex items-center gap-1.5">{index > 0 && <span className="h-px w-4 shrink-0 bg-border sm:w-8" />}<span className="flex items-center gap-1.5 text-xs"><span className={`grid size-4 shrink-0 place-items-center rounded-full text-[8px] font-bold ${step.active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>{step.active ? <CheckCircle2 className="size-2.5" /> : index + 1}</span><span className={step.active ? "font-medium text-foreground" : "text-muted-foreground"}>{step.label}</span></span></span>)}</div>
           </>}
         </section>
@@ -661,17 +674,20 @@ function EvidenceLibrary({ active, isAuthenticated, isDemo, profileOpen, setProf
 function Safeguards() { return <section className="mt-6 rise"><div className="rounded-xl border bg-card p-6 shadow-sm"><p className="font-mono text-[11px] font-bold uppercase tracking-[.16em] text-primary">Our approach</p><h2 className="mt-1 font-serif text-2xl font-semibold">What this tool does — and doesn't do</h2><div className="mt-6 grid gap-5 lg:grid-cols-2"><Guardrail title="We show our working" body="Every result links back to the exact bit of text it came from. If we can't find where something came from, we say so — we don't make it up." /><Guardrail title="We don't inflate what you did" body="Being part of something isn't the same as leading it. Giving informal advice isn't the same as being a formal leader. We only credit you with a project's results if your evidence actually supports that." /><Guardrail title="“Not found” isn't a judgement" body="“Not found” just means we couldn't see it in what you gave us. It's not saying you don't have the experience — only that it isn't written down yet." /><Guardrail title="Decision support only" body="The product does not determine employment eligibility, banding/grading decisions, professional competence, legal rights, job evaluation outcomes, or any HR decision, for any profession." /></div></div></section>; }
 function Guardrail({ title, body }: { title: string; body: string }) { return <div className="rounded-lg border bg-muted/25 p-4"><LockKeyhole className="size-4 text-primary" /><h3 className="mt-3 font-semibold">{title}</h3><p className="mt-1 text-sm leading-6 text-muted-foreground">{body}</p></div>; }
 
-// Fixed-position, bottom-anchored (not top-anchored), so an unbounded
-// height here means a long excerpt grows the panel *upward* -- past the
-// top of the viewport, taking the header (and its only close button) with
-// it. Confirmed live: a long evidence quote made the panel genuinely
-// unclosable, since nothing outside this component can dismiss it (no
-// backdrop, no Escape handler -- onClose only ever fires from that one
-// button). Fixed by capping the panel's total height to the viewport and
-// making everything below the header its own scroll region, so the header
-// (and its close button) can never scroll out of reach regardless of
-// excerpt length.
-function SourcePanel({ evidence, document, onClose }: any) { return <aside className="fixed bottom-12 right-4 z-50 flex max-h-[calc(100vh-6rem)] w-[min(440px,calc(100vw-2rem))] flex-col rounded-xl border bg-card p-5 shadow-2xl rise print:hidden"><div className="flex shrink-0 items-start justify-between gap-3"><div><p className="font-mono text-[11px] font-bold uppercase tracking-[.14em] text-primary">Where this came from</p><h2 className="mt-1 font-serif text-xl font-semibold">{document?.title ?? "Source document"}</h2></div><Button variant="ghost" size="icon" onClick={onClose} aria-label="Close source inspector"><X className="size-4" /></Button></div><div className="mt-4 min-h-0 flex-1 overflow-y-auto"><div className="rounded-lg border bg-muted/40 p-4"><p className="text-sm leading-6">“{evidence.excerpt}”</p></div><div className="mt-4 grid grid-cols-2 gap-3 text-xs"><div><p className="font-mono uppercase tracking-wide text-muted-foreground">Location</p><p className="mt-1 font-medium">{evidence.sourceLocation}</p></div><div><p className="font-mono uppercase tracking-wide text-muted-foreground">Evidence type</p><p className="mt-1 font-medium">{evidence.evidenceType}</p></div></div><p className="mt-4 border-t pt-3 text-xs leading-5 text-muted-foreground">This is based on the text above — shown so you can check our reading of it yourself.</p></div></aside>; }
+// A guest result only ever exists in the 15-minute in-memory guestJobs entry
+// (see routers.ts) until this is used -- clicking it calls
+// guest.makeShareable, which publishes that result to a permanent, public
+// /results/:slug page (no self-serve unshare, by design -- see the
+// sharedResults table comment in drizzle/schema.ts). Copying the link is a
+// separate action from generating it so a guest can grab it again later in
+// the same session without re-triggering the mutation.
+function GuestShareControl({ shareUrl, onShare, pending }: { shareUrl: string | null; onShare: () => void; pending: boolean }) {
+  if (shareUrl) {
+    const fullUrl = `${window.location.origin}${shareUrl}`;
+    return <button type="button" onClick={() => { navigator.clipboard.writeText(fullUrl); toast.success("Link copied — this page is now public and permanent, so anyone with the link can see it."); }} className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/5 px-2.5 py-1 text-xs font-semibold text-primary hover:bg-primary/10"><Copy className="size-3" />Copy share link</button>;
+  }
+  return <button type="button" onClick={onShare} disabled={pending} className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/5 px-2.5 py-1 text-xs font-semibold text-primary hover:bg-primary/10 disabled:opacity-60">{pending ? <Loader2 className="size-3 animate-spin" /> : <Share2 className="size-3" />}Make this shareable</button>;
+}
 
 function ProfileDialog({ open, onOpenChange, draft, setDraft, onSubmit, isAuthenticated, onDeleteAccount, deleteAccountPending }: any) {
   const [deletePassword, setDeletePassword] = useState("");

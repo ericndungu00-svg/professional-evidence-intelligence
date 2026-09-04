@@ -1,5 +1,6 @@
 import { Badge } from "@/components/ui/badge";
-import { ArrowRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { ArrowRight, X } from "lucide-react";
 
 // Extracted out of Home.tsx (where it used to be a private, unexported
 // function) so it can be reused by the shared-result page without
@@ -32,6 +33,18 @@ function ComponentChecks({ active, components, selectedEvidenceId, setSelectedEv
   if (!components?.length) return null;
   return <div className="mt-3 space-y-2 border-t border-dashed pt-3"><p className="font-mono text-[11px] font-bold uppercase tracking-[.12em] text-muted-foreground">In detail</p>{components.map((component: any, index: number) => <div key={`${component.component}-${index}`} className="rounded-md bg-muted/35 p-2.5"><div className="flex flex-wrap items-center gap-2"><Badge variant="outline" className={assessmentStyle[canonicalAssessment(component.assessment)]}>{formatStatus(canonicalAssessment(component.assessment))}</Badge><span className="text-xs font-semibold">{component.component}</span></div><p className="mt-1 text-xs leading-5 text-muted-foreground">{component.interpretation}</p>{component.gap && <p className="mt-1 text-xs leading-5 text-amber-800"><strong>Limitation:</strong> {component.gap}</p>}{component.evidenceIds?.length ? <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">{component.evidenceIds.map((id: number) => { const source = sourceFor(active, id); return source.evidence ? <button key={id} onClick={() => setSelectedEvidenceId(id)} className={`py-1.5 text-xs font-semibold text-primary underline underline-offset-4 ${selectedEvidenceId === id ? "opacity-60" : ""}`}>View source: {source.document?.title ?? "evidence"}</button> : null; })}</div> : <p className="mt-2 text-xs text-muted-foreground">We haven't linked a specific quote to this yet.</p>}</div>)}</div>;
 }
+
+// Fixed-position, bottom-anchored (not top-anchored), so an unbounded
+// height here means a long excerpt grows the panel *upward* -- past the
+// top of the viewport, taking the header (and its only close button) with
+// it. Confirmed live: a long evidence quote made the panel genuinely
+// unclosable, since nothing outside this component can dismiss it (no
+// backdrop, no Escape handler -- onClose only ever fires from that one
+// button). Fixed by capping the panel's total height to the viewport and
+// making everything below the header its own scroll region, so the header
+// (and its close button) can never scroll out of reach regardless of
+// excerpt length.
+export function SourcePanel({ evidence, document, onClose }: any) { return <aside className="fixed bottom-12 right-4 z-50 flex max-h-[calc(100vh-6rem)] w-[min(440px,calc(100vw-2rem))] flex-col rounded-xl border bg-card p-5 shadow-2xl rise print:hidden"><div className="flex shrink-0 items-start justify-between gap-3"><div><p className="font-mono text-[11px] font-bold uppercase tracking-[.14em] text-primary">Where this came from</p><h2 className="mt-1 font-serif text-xl font-semibold">{document?.title ?? "Source document"}</h2></div><Button variant="ghost" size="icon" onClick={onClose} aria-label="Close source inspector"><X className="size-4" /></Button></div><div className="mt-4 min-h-0 flex-1 overflow-y-auto"><div className="rounded-lg border bg-muted/40 p-4"><p className="text-sm leading-6">“{evidence.excerpt}”</p></div><div className="mt-4 grid grid-cols-2 gap-3 text-xs"><div><p className="font-mono uppercase tracking-wide text-muted-foreground">Location</p><p className="mt-1 font-medium">{evidence.sourceLocation}</p></div><div><p className="font-mono uppercase tracking-wide text-muted-foreground">Evidence type</p><p className="mt-1 font-medium">{evidence.evidenceType}</p></div></div><p className="mt-4 border-t pt-3 text-xs leading-5 text-muted-foreground">This is based on the text above — shown so you can check our reading of it yourself.</p></div></aside>; }
 
 export function EvidenceMap({ active, assessmentByRequirement, selectedEvidenceId, setSelectedEvidenceId, objective }: any) {
   const requirements = active?.requirements ?? [];
