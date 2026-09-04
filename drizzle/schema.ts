@@ -187,6 +187,20 @@ export const commercialEvents = mysqlTable(
   table => [uniqueIndex("commercial_events_user_type_unique").on(table.userId, table.eventType)],
 );
 
+// A persisted, opt-in-shared snapshot of a guest analysis result, keyed by
+// an opaque public slug -- this is what backs a public `/results/:slug`
+// page. Deliberately stores the whole GuestAnalysisResult as one JSON blob
+// rather than normalizing it into rows: it's a point-in-time snapshot meant
+// to render read-only forever (no expiry, no edits after creation, see the
+// makeShareable comment in routers.ts), not a live record anything needs to
+// query by its parts. Not tied to `users` -- guest results have no account.
+export const sharedResults = mysqlTable("sharedResults", {
+  id: int("id").autoincrement().primaryKey(),
+  slug: varchar("slug", { length: 24 }).notNull().unique(),
+  resultData: json("resultData").$type<Record<string, unknown>>().notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
 // A message sent from the public Contact page. Deliberately not tied to
 // `users` -- the form works for anyone, signed in or not, matching the
 // rest of the product's no-account-needed positioning. Stored durably so
@@ -210,3 +224,4 @@ export type TargetRequirement = typeof targetRequirements.$inferSelect;
 export type ExtractedEvidence = typeof extractedEvidence.$inferSelect;
 export type CommercialEvent = typeof commercialEvents.$inferSelect;
 export type ContactMessage = typeof contactMessages.$inferSelect;
+export type SharedResult = typeof sharedResults.$inferSelect;
