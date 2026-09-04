@@ -12,6 +12,7 @@ import {
   extractedEvidence,
   passwordResetTokens,
   sessions,
+  sharedResults,
   targetRequirements,
   users,
 } from "../drizzle/schema";
@@ -372,4 +373,40 @@ export async function listContactMessages() {
   const db = await getDb();
   if (!db) return [];
   return db.select().from(contactMessages).orderBy(desc(contactMessages.createdAt));
+}
+
+// Persists a guest's analysis result under an opaque public slug once they
+// opt in to sharing it (see guest.makeShareable in routers.ts). No update
+// path is exposed anywhere -- once created, a shared result is immutable and
+// permanent by design (see the retention decision recorded on sharedResults
+// in drizzle/schema.ts).
+export async function createSharedResult(args: { slug: string; resultData: Record<string, unknown> }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is unavailable.");
+  await db.insert(sharedResults).values({ slug: args.slug, resultData: args.resultData });
+}
+
+// Public read, keyed by the opaque slug -- backs both the shared.getBySlug
+// tRPC query (client hydration) and the crawlable /results/:slug Express
+// route (server-rendered shell), so the two never drift on what "a shared
+// result" looks like.
+export async function getSharedResultBySlug(slug: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(sharedResults).where(eq(sharedResults.slug, slug)).limit(1);
+  const row = result[0];
+  if (!row) return undefined;
+  // Same mysql2 quirk documented on evidenceAnalyses.objectiveReport above:
+  // a json() column doesn't always come back auto-parsed (confirmed live
+  // here too, not just theoretical -- MariaDB handed this back as a raw
+  // string during local verification). Parse defensively so callers always
+  // get a real object.
+  if (typeof row.resultData === "string") {
+    try {
+      return { ...row, resultData: JSON.parse(row.resultData) as Record<string, unknown> };
+    } catch {
+      return undefined;
+    }
+  }
+  return row;
 }
