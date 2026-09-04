@@ -7,6 +7,12 @@ import App from "./App";
 import { requireJsonTrpcResponse } from "./lib/trpcResponse";
 import "./index.css";
 
+// Only present on a /results/:slug response (see server/_core/index.ts and
+// sharedResultHtml.ts) -- the server-rendered content a crawler sees before
+// JS runs. Remove it once React mounts so it doesn't sit duplicated under
+// the live interactive page. No-op on every other route.
+document.getElementById("ssr-fallback")?.remove();
+
 const queryClient = new QueryClient();
 
 queryClient.getQueryCache().subscribe(event => {

@@ -22,29 +22,53 @@ export async function setupVite(app: Express, server: Server) {
 
   app.use(vite.middlewares);
   app.use("*", async (req, res, next) => {
-    const url = req.originalUrl;
-
     try {
-      const clientTemplate = path.resolve(
-        import.meta.dirname,
-        "../..",
-        "client",
-        "index.html"
-      );
-
-      // always reload the index.html file from disk incase it changes
-      let template = await fs.promises.readFile(clientTemplate, "utf-8");
-      template = template.replace(
-        `src="/src/main.tsx"`,
-        `src="/src/main.tsx?v=${nanoid()}"`
-      );
-      const page = await vite.transformIndexHtml(url, template);
+      const page = await renderDevIndexHtml(vite, req.originalUrl);
       res.status(200).set({ "Content-Type": "text/html" }).end(page);
     } catch (e) {
       vite.ssrFixStacktrace(e as Error);
       next(e);
     }
   });
+
+  // Returned so the caller (server/_core/index.ts) can also use it to
+  // render the crawlable /results/:slug route through renderDevIndexHtml
+  // below -- one dev-mode Vite server instance, shared rather than
+  // duplicated.
+  return vite;
+}
+
+// Factored out of setupVite's fallback handler so the crawlable
+// /results/:slug route (see server/_core/index.ts) can obtain the exact
+// same dev-mode HTML shell -- reused rather than duplicated, so the two
+// routes can never drift on how dev-mode script tags get resolved.
+export async function renderDevIndexHtml(vite: Awaited<ReturnType<typeof createViteServer>>, url: string): Promise<string> {
+  const clientTemplate = path.resolve(
+    import.meta.dirname,
+    "../..",
+    "client",
+    "index.html"
+  );
+
+  // always reload the index.html file from disk incase it changes
+  let template = await fs.promises.readFile(clientTemplate, "utf-8");
+  template = template.replace(
+    `src="/src/main.tsx"`,
+    `src="/src/main.tsx?v=${nanoid()}"`
+  );
+  return vite.transformIndexHtml(url, template);
+}
+
+// Same resolution serveStatic below uses -- factored out so the crawlable
+// /results/:slug route (server/_core/index.ts) reads the identical built
+// index.html serveStatic itself falls back to, rather than a second,
+// possibly-drifting path computation.
+export function getDistIndexHtmlPath(): string {
+  const distPath =
+    process.env.NODE_ENV === "development"
+      ? path.resolve(import.meta.dirname, "../..", "dist", "public")
+      : path.resolve(import.meta.dirname, "public");
+  return path.resolve(distPath, "index.html");
 }
 
 export function serveStatic(app: Express) {

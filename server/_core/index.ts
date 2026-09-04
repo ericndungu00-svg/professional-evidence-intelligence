@@ -3,6 +3,7 @@ import express from "express";
 import type { Request } from "express";
 import rateLimit from "express-rate-limit";
 import { createServer } from "http";
+import fs from "fs";
 import net from "net";
 import path from "path";
 import { migrate } from "drizzle-orm/mysql2/migrator";
@@ -10,9 +11,11 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
-import { getDb } from "../db";
-import { serveStatic, setupVite } from "./vite";
+import { getDb, getSharedResultBySlug } from "../db";
+import { renderSharedResultFoundHtml, renderSharedResultNotFoundHtml } from "./sharedResultHtml";
+import { getDistIndexHtmlPath, renderDevIndexHtml, serveStatic, setupVite } from "./vite";
 import { ENV } from "./env";
+import type { ViteDevServer } from "vite";
 
 // Guards every endpoint that either costs money per call (guest.startAnalyse
 // and evidence.runAnalysis both trigger a real Gemini request) or is
@@ -143,9 +146,41 @@ async function startServer() {
       },
     })
   );
+
+  // Set once setupVite resolves below, in dev only -- the route handler
+  // closes over this rather than requiring it at registration time, since
+  // Express only calls the handler per-request (by which point setupVite
+  // has already run).
+  let viteDevServer: ViteDevServer | undefined;
+
+  // Registered before the dev/prod SPA-fallback branch below so it's
+  // matched first in both modes. Unlike every other page on this site
+  // (100% client-rendered -- the server otherwise sends an empty #root and
+  // everything else only exists once React mounts), this route serves
+  // genuinely server-rendered HTML: a real per-result <title>/meta
+  // description/OG tags and a visible content summary, so a crawler or a
+  // social-card scraper that never runs JS still sees real content for a
+  // shared guest result. See server/_core/sharedResultHtml.ts for why.
+  app.get("/results/:slug", async (req, res, next) => {
+    try {
+      const canonicalUrl = `${req.protocol}://${req.get("host")}${req.originalUrl}`;
+      const baseHtml = process.env.NODE_ENV === "development"
+        ? await renderDevIndexHtml(viteDevServer!, req.originalUrl)
+        : await fs.promises.readFile(getDistIndexHtmlPath(), "utf-8");
+      const row = await getSharedResultBySlug(req.params.slug);
+      if (!row) {
+        res.status(404).set({ "Content-Type": "text/html" }).end(renderSharedResultNotFoundHtml(baseHtml, canonicalUrl));
+        return;
+      }
+      res.status(200).set({ "Content-Type": "text/html" }).end(renderSharedResultFoundHtml(baseHtml, row.resultData, canonicalUrl));
+    } catch (e) {
+      next(e);
+    }
+  });
+
   // development mode uses Vite, production mode uses static files
   if (process.env.NODE_ENV === "development") {
-    await setupVite(app, server);
+    viteDevServer = await setupVite(app, server);
   } else {
     serveStatic(app);
   }
