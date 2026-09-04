@@ -12,7 +12,7 @@ import {
   targetRequirements,
 } from "../drizzle/schema";
 import { countAnalysesForUser, createContactMessage, createUser, deleteAllSessionsForUser, deleteUserAccount, getDb, getDocumentStorageKeysForUser, getTargetDocument, getUserByEmail, getUserById, getWorkspace, listCommercialEvents, listContactMessages, markEmailVerificationTokenUsed, markPasswordResetTokenUsed, recordCommercialEvent, setUserEmailVerified, softDeleteDocument, touchUserLastSignedIn, updateUserPassword } from "./db";
-import { DEMO_LABEL, demoAssessments, demoContradictions, demoCurrentRole, demoCurrentRoleResponsibilities, demoDocuments, demoEvidence, demoObjectiveReports, demoProfile, demoRequirements, demoTarget } from "./demoData";
+import { DEMO_LABEL, getDemoBundle } from "./demoData";
 import { analyseAnnualAppraisal, analyseJobEvaluation, AppraisalGenerationError, detectPlainTextConflicts, extractEvidenceItems, extractRequirements, locationForParagraph, mapEvidenceToRequirements, MappingDraft, matchesClaimedFileType, paragraphize, parseEvidenceFile } from "./evidenceEngine";
 import { storageDelete, storagePut } from "./storage";
 import { COOKIE_NAME } from "@shared/const";
@@ -24,6 +24,7 @@ import { adminProcedure, protectedProcedure, publicProcedure, router } from "./_
 
 const disclaimer = "This tool analyses supplied professional evidence and provides decision support only. It does not determine employment eligibility, banding/grading decisions, legal rights, job-evaluation outcomes, or professional competence for any profession.";
 const objectiveSchema = z.enum(["A", "B", "C"]);
+const demoScenarioSchema = z.enum(["specialist-advisor", "civil-service"]);
 // A commercial-interest signal (e.g. clicking "Yes, let me know" on the
 // Pro-interest dialog). Its own constant string, not shared with anything
 // else, so a future second signal type is just a new string value, not a
@@ -378,21 +379,26 @@ export const appRouter = router({
     }),
   }),
   demo: router({
-    workspace: publicProcedure.query(() => ({
-      isDemo: true,
-      label: DEMO_LABEL,
-      disclaimer,
-      profile: { id: "demo-profile", ...demoProfile },
-      documents: [...demoDocuments.map((document, index) => ({ id: ["demo-cv", "demo-appraisal", "demo-audit", "demo-feedback", "demo-teaching", "demo-student"][index], ...document, extractionStatus: "ready", isDemo: "yes" })), { id: "demo-current-role", ...demoCurrentRole, extractionStatus: "ready", isDemo: "yes" }],
-      targetDocument: { id: "demo-target", ...demoTarget, extractionStatus: "ready", isDemo: "yes" },
-      currentRoleDocument: { id: "demo-current-role", ...demoCurrentRole, extractionStatus: "ready", isDemo: "yes" },
-      requirements: demoRequirements,
-      currentRoleResponsibilities: demoCurrentRoleResponsibilities,
-      evidence: demoEvidence,
-      assessments: demoAssessments,
-      objectiveReports: demoObjectiveReports,
-      contradictions: demoContradictions,
-    })),
+    workspace: publicProcedure.input(z.object({ scenario: demoScenarioSchema.optional() }).optional()).query(({ input }) => {
+      const bundle = getDemoBundle(input?.scenario);
+      return {
+        isDemo: true,
+        label: DEMO_LABEL,
+        disclaimer,
+        scenario: bundle.scenario,
+        personName: bundle.personName,
+        profile: { id: "demo-profile", ...bundle.profile },
+        documents: [...bundle.documents.map((document, index) => ({ id: bundle.documentKeys[index], ...document, extractionStatus: "ready", isDemo: "yes" })), { id: "demo-current-role", ...bundle.currentRole, extractionStatus: "ready", isDemo: "yes" }],
+        targetDocument: { id: "demo-target", ...bundle.target, extractionStatus: "ready", isDemo: "yes" },
+        currentRoleDocument: { id: "demo-current-role", ...bundle.currentRole, extractionStatus: "ready", isDemo: "yes" },
+        requirements: bundle.requirements,
+        currentRoleResponsibilities: bundle.currentRoleResponsibilities,
+        evidence: bundle.evidence,
+        assessments: bundle.assessments,
+        objectiveReports: bundle.objectiveReports,
+        contradictions: bundle.contradictions,
+      };
+    }),
   }),
   guest: router({
     startAnalyse: publicProcedure.input(guestAnalysisSchema).mutation(async ({ input }) => {
@@ -534,24 +540,24 @@ export const appRouter = router({
       if (!analysis) throw new TRPCError({ code: "NOT_FOUND", message: "Analysis not found." });
       return { analysisId: analysis.id, objective: analysis.objective, status: analysis.status, summary: analysis.generatedSummary, objectiveReport: analysis.objectiveReport };
     }),
-    loadDemo: protectedProcedure.mutation(async ({ ctx }) => {
+    loadDemo: protectedProcedure.input(z.object({ scenario: demoScenarioSchema.optional() }).optional()).mutation(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "The evidence library is temporarily unavailable." });
       const existing = await getWorkspace(ctx.user.id);
       if (existing.documents.length) return { imported: false, message: "Your library already contains documents; the preview remains available without replacing it." };
-      await db.insert(evidenceProfiles).values({ userId: ctx.user.id, ...demoProfile, isDemo: "yes" }).onDuplicateKeyUpdate({ set: { ...demoProfile, isDemo: "yes" } });
+      const bundle = getDemoBundle(input?.scenario);
+      await db.insert(evidenceProfiles).values({ userId: ctx.user.id, ...bundle.profile, isDemo: "yes" }).onDuplicateKeyUpdate({ set: { ...bundle.profile, isDemo: "yes" } });
       const profile = (await getWorkspace(ctx.user.id)).profile;
-      const demoDocumentKeys = ["demo-cv", "demo-appraisal", "demo-audit", "demo-feedback", "demo-teaching", "demo-student"];
-      for (let index = 0; index < demoDocuments.length; index += 1) {
-        const document = demoDocuments[index]!;
+      for (let index = 0; index < bundle.documents.length; index += 1) {
+        const document = bundle.documents[index]!;
         const documentId = await persistDocument({ userId: ctx.user.id, profileId: profile?.id ?? null, title: document.title, fileName: document.fileName, mimeType: "text/plain", documentType: "evidence", sourceKind: document.sourceKind, extractedText: document.extractedText, isDemo: "yes" });
-        const demoItems = demoEvidence.filter(item => item.documentId === demoDocumentKeys[index]);
+        const demoItems = bundle.evidence.filter(item => item.documentId === bundle.documentKeys[index]);
         if (demoItems.length) await db.insert(extractedEvidence).values(demoItems.map(item => ({ userId: ctx.user.id, documentId, statement: item.statement, excerpt: item.excerpt, sourceLocation: item.sourceLocation, category: item.category, evidenceType: item.evidenceType, confidence: item.confidence as "high" | "medium" | "low" })));
       }
-      const targetId = await persistDocument({ userId: ctx.user.id, profileId: profile?.id ?? null, title: demoTarget.title, fileName: demoTarget.fileName, mimeType: "text/plain", documentType: "target", sourceKind: demoTarget.sourceKind, extractedText: demoTarget.extractedText, isDemo: "yes" });
-      await db.insert(targetRequirements).values(demoRequirements.map((item, index) => ({ userId: ctx.user.id, targetDocumentId: targetId, category: item.category, criterion: item.criterion, sourceLocation: item.sourceLocation, ordinal: index + 1 })));
-      const currentRoleId = await persistDocument({ userId: ctx.user.id, profileId: profile?.id ?? null, title: demoCurrentRole.title, fileName: demoCurrentRole.fileName, mimeType: "text/plain", documentType: "current_role", sourceKind: demoCurrentRole.sourceKind, extractedText: demoCurrentRole.extractedText, isDemo: "yes" });
-      await db.insert(targetRequirements).values(demoCurrentRoleResponsibilities.map((item, index) => ({ userId: ctx.user.id, targetDocumentId: currentRoleId, category: item.category, criterion: item.criterion, sourceLocation: item.sourceLocation, ordinal: index + 1 })));
+      const targetId = await persistDocument({ userId: ctx.user.id, profileId: profile?.id ?? null, title: bundle.target.title, fileName: bundle.target.fileName, mimeType: "text/plain", documentType: "target", sourceKind: bundle.target.sourceKind, extractedText: bundle.target.extractedText, isDemo: "yes" });
+      await db.insert(targetRequirements).values(bundle.requirements.map((item, index) => ({ userId: ctx.user.id, targetDocumentId: targetId, category: item.category, criterion: item.criterion, sourceLocation: item.sourceLocation, ordinal: index + 1 })));
+      const currentRoleId = await persistDocument({ userId: ctx.user.id, profileId: profile?.id ?? null, title: bundle.currentRole.title, fileName: bundle.currentRole.fileName, mimeType: "text/plain", documentType: "current_role", sourceKind: bundle.currentRole.sourceKind, extractedText: bundle.currentRole.extractedText, isDemo: "yes" });
+      await db.insert(targetRequirements).values(bundle.currentRoleResponsibilities.map((item, index) => ({ userId: ctx.user.id, targetDocumentId: currentRoleId, category: item.category, criterion: item.criterion, sourceLocation: item.sourceLocation, ordinal: index + 1 })));
       return { imported: true, message: "Fictional demonstration data is now stored in your evidence library." };
     }),
     document: protectedProcedure.input(z.object({ id: z.number().int().positive() })).query(async ({ ctx, input }) => {

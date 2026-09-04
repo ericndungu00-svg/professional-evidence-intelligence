@@ -140,6 +140,224 @@ export const demoContradictions = [
   { id: 302, type: "Outcome attribution", severity: "review", claim: "The turnaround-time reduction should be attributed to the project intervention, not solely to Sarah.", explanation: "The report records a 21-to-14-day project outcome but does not establish that one individual caused it.", evidenceIds: [107, 108] },
 ];
 
+// A second demonstration scenario, distinct from Sarah Mwangi's traditional
+// person-specification promotion case above. This one uses a criteria/
+// behaviour-statement target (in the shape of the UK Civil Service's Success
+// Profile behaviours) rather than a person specification, since that's a
+// different, common structure for "map my evidence against named criteria"
+// applications outside a single sector. It deliberately mirrors the same
+// participation-vs-ownership and informal-vs-formal pedagogical points as
+// Sarah's scenario, using this format's own vocabulary (working-group
+// membership vs. chairing it; informal guidance vs. formal mentoring).
+export const civilServiceProfile = {
+  currentRole: "Executive Officer (EO), Operational Delivery",
+  profession: "Civil Servant",
+  specialty: "Operational casework",
+  experience: "5 years in the Civil Service",
+  currentLevel: "EO",
+  targetRole: "Higher Executive Officer (HEO)",
+  careerObjective: "Understand the documentary evidence available to write my Success Profile behaviour statements for HEO.",
+  ownClaims:
+    "I feel like I'm already doing a lot of HEO-level work. I manage my own caseload, I sit on a process-improvement working group, and colleagues often come to me with questions. But I keep getting marked 'partially met' against the behaviours at interview and I don't know what's missing.",
+};
+
+export const civilServiceDocuments = [
+  {
+    title: "Amara Okafor CV",
+    fileName: "amara-okafor-cv.txt",
+    sourceKind: "CV",
+    documentType: "evidence" as const,
+    extractedText: `Amara Okafor — Executive Officer (EO)\n\nOperational Delivery team\n\nCurrent responsibilities\nManages an independent caseload of operational cases end to end. Liaises with other teams and external stakeholders on complex cases. Attends the directorate's case-quality working group. Provides informal guidance to newer team members when asked. Contributed data and testing to a case-triage redesign. Completed L&D: Effective Communication for EOs, Decision Making for EOs, and a Working Together workshop.`,
+  },
+  {
+    title: "2025 Performance Review",
+    fileName: "amara-okafor-review-2025.txt",
+    sourceKind: "Performance review",
+    documentType: "evidence" as const,
+    extractedText: `Annual performance review — fictional demonstration data\n\nCasework practice\nAmara handles the great majority of her caseload independently and applies sound judgement on complex or borderline cases.\n\nColleague support\nAmara has given informal guidance to two newer colleagues when they've asked for it.\n\nWorking group contribution\nAmara took part in the case-triage redesign working group: she helped gather baseline data and tested the new process before rollout.\n\nDevelopment discussion\nAmara has been encouraged to seek out a chairing or leading opportunity ahead of her HEO application.`,
+  },
+  {
+    title: "Case-Triage Redesign Report",
+    fileName: "case-triage-redesign-report.txt",
+    sourceKind: "Working group report",
+    documentType: "evidence" as const,
+    extractedText: `Case-triage redesign report — fictional demonstration data\n\nWorking group membership\nAmara collected baseline processing-time data, attended working group sessions, and tested the redesigned triage process ahead of rollout.\n\nOutcome\nAverage case processing time fell from approximately 18 days to 11 days after the redesigned triage process was introduced.\n\nAttribution\nThe report names the working group's sponsor as a named HEO. It identifies Amara as a working-group member. It does not identify Amara as the working group's chair or lead.`,
+  },
+  {
+    title: "Line Manager Feedback",
+    fileName: "line-manager-feedback.txt",
+    sourceKind: "Manager feedback",
+    documentType: "evidence" as const,
+    extractedText: `Line manager feedback — fictional demonstration data\n\nAmara is a reliable and increasingly confident caseworker. Colleagues sometimes ask her for guidance on tricky cases. She has been a useful contributor to the triage working group.\n\nAmara is encouraged to seek out a chance to chair or lead a piece of work ahead of her HEO application, to build direct evidence of leading change.`,
+  },
+  {
+    title: "Colleague Thank-You Note",
+    fileName: "colleague-note.txt",
+    sourceKind: "Colleague feedback",
+    documentType: "evidence" as const,
+    extractedText: `Colleague note — fictional demonstration data\n\nThanks for talking me through how to handle that escalation last week — really helped me get my head around it. No formal record of this guidance was kept beyond this note.`,
+  },
+];
+
+export const civilServiceTarget = {
+  title: "Fictional HEO Success Profile — Behaviour Statements",
+  fileName: "fictional-heo-success-profile.txt",
+  sourceKind: "Success Profile behaviours",
+  documentType: "target" as const,
+  extractedText: `Fictional demonstration specification: Higher Executive Officer (HEO) — Success Profile behaviours, Level 2\n\nWorking Together\n- Actively build relationships across teams and organisations\n- Encourage input from a diverse range of people and perspectives\n- Model inclusive behaviour and challenge poor behaviour when you see it\n\nCommunicating and Influencing\n- Communicate clearly and concisely, adapting style to the audience\n- Provide advice and recommendations to others outside own direct area\n- Manage the expectations of stakeholders confidently\n\nMaking Effective Decisions\n- Use evidence and analysis to support decisions\n- Take responsibility for decisions, and escalate where required\n- Ask questions to understand the reasons behind decisions\n\nDelivering at Pace\n- Take responsibility for delivering own and team objectives\n- Show resilience when working under pressure or facing setbacks\n- Manage overall performance of a piece of work against agreed milestones\n\nLeadership\n- Role-model expected behaviours and organisational values\n- Take a lead role in developing colleagues, including through coaching and mentoring\n- Lead and support others through change, engaging with people to explain the reasons for it\n\nDesirable\n- Chaired or led a working group or project\n- Formally mentored or coached a colleague\n- Evidence of leading a piece of change from start to finish`,
+};
+
+export const civilServiceCurrentRole = {
+  title: "Fictional EO Role Responsibilities",
+  fileName: "fictional-eo-role.txt",
+  sourceKind: "Current role responsibilities",
+  documentType: "current_role" as const,
+  extractedText: `Fictional demonstration current role: Executive Officer (EO), Operational Delivery
+
+Casework practice
+- Manage an allocated operational caseload under agreed procedures, escalating complex or borderline decisions.
+- Liaise with other teams and stakeholders on individual cases.
+
+Working with others
+- Contribute to team and working-group meetings as a member.
+- Offer informal guidance to colleagues when asked, within own area of experience.
+
+Process improvement
+- Take part in process-improvement activity as directed, including data collection and testing.
+- Support implementation of agreed process changes within own team.
+
+Role boundaries
+- Chairing or leading a working group, formally mentoring colleagues, and independent ownership of a change initiative are not assigned within this role description.`,
+};
+
+export const civilServiceEvidence = [
+  { id: 1101, documentId: "demo-cs-cv", statement: "Manages an independent caseload of operational cases end to end.", excerpt: "Manages an independent caseload of operational cases end to end.", sourceLocation: "Paragraph 3", category: "Casework practice", evidenceType: "Documented responsibility", confidence: "high" },
+  { id: 1102, documentId: "demo-cs-cv", statement: "Liaises with other teams and external stakeholders on complex cases.", excerpt: "Liaises with other teams and external stakeholders on complex cases.", sourceLocation: "Paragraph 3", category: "Casework practice", evidenceType: "Documented responsibility", confidence: "high" },
+  { id: 1103, documentId: "demo-cs-review", statement: "Handles the great majority of her caseload independently and applies sound judgement on complex or borderline cases.", excerpt: "Amara handles the great majority of her caseload independently and applies sound judgement on complex or borderline cases.", sourceLocation: "Paragraph 2", category: "Casework practice", evidenceType: "Performance review evidence", confidence: "high" },
+  { id: 1104, documentId: "demo-cs-review", statement: "Gave informal guidance to two newer colleagues when they've asked for it.", excerpt: "Amara has given informal guidance to two newer colleagues when they've asked for it.", sourceLocation: "Paragraph 3", category: "Working with others", evidenceType: "Performance review evidence", confidence: "high" },
+  { id: 1105, documentId: "demo-cs-manager", statement: "Colleagues sometimes ask her for guidance on tricky cases.", excerpt: "Colleagues sometimes ask her for guidance on tricky cases.", sourceLocation: "Paragraph 2", category: "Leadership", evidenceType: "Manager feedback", confidence: "medium" },
+  { id: 1106, documentId: "demo-cs-audit", statement: "Collected baseline processing-time data, attended working group sessions, and tested the redesigned triage process ahead of rollout.", excerpt: "Amara collected baseline processing-time data, attended working group sessions, and tested the redesigned triage process ahead of rollout.", sourceLocation: "Paragraph 2", category: "Process improvement", evidenceType: "Working group report", confidence: "high" },
+  { id: 1107, documentId: "demo-cs-audit", statement: "Average case processing time fell from approximately 18 days to 11 days after the redesigned triage process was introduced.", excerpt: "Average case processing time fell from approximately 18 days to 11 days after the redesigned triage process was introduced.", sourceLocation: "Paragraph 3", category: "Process improvement", evidenceType: "Project outcome", confidence: "high" },
+  { id: 1108, documentId: "demo-cs-audit", statement: "Amara is identified as a working-group member, not as the group's chair or lead.", excerpt: "The report names the working group's sponsor as a named HEO. It identifies Amara as a working-group member. It does not identify Amara as the working group's chair or lead.", sourceLocation: "Paragraph 4", category: "Process improvement", evidenceType: "Attribution qualification", confidence: "high" },
+  { id: 1109, documentId: "demo-cs-peer", statement: "Provided informal guidance to a colleague on handling an escalation, with no formal record kept.", excerpt: "Thanks for talking me through how to handle that escalation last week — really helped me get my head around it. No formal record of this guidance was kept beyond this note.", sourceLocation: "Paragraph 1", category: "Working with others", evidenceType: "Colleague feedback", confidence: "medium" },
+];
+
+export const civilServiceRequirements = [
+  { id: 1201, category: "Working Together", criterion: "Actively build relationships across teams and organisations", sourceLocation: "Paragraph 2" },
+  { id: 1202, category: "Communicating and Influencing", criterion: "Provide advice and recommendations to others outside own direct area", sourceLocation: "Paragraph 3" },
+  { id: 1203, category: "Making Effective Decisions", criterion: "Take responsibility for decisions, and escalate where required", sourceLocation: "Paragraph 4" },
+  { id: 1204, category: "Delivering at Pace", criterion: "Manage overall performance of a piece of work against agreed milestones", sourceLocation: "Paragraph 5" },
+  { id: 1205, category: "Leadership", criterion: "Take a lead role in developing colleagues, including through coaching and mentoring", sourceLocation: "Paragraph 6" },
+  { id: 1206, category: "Leadership", criterion: "Lead and support others through change, engaging with people to explain the reasons for it", sourceLocation: "Paragraph 6" },
+  { id: 1207, category: "Desirable", criterion: "Chaired or led a working group or project", sourceLocation: "Paragraph 8" },
+  { id: 1208, category: "Desirable", criterion: "Formally mentored or coached a colleague", sourceLocation: "Paragraph 8" },
+];
+
+export const civilServiceCurrentRoleResponsibilities = [
+  { id: 1401, category: "Casework practice", criterion: "Manage an allocated operational caseload under agreed procedures, escalating complex or borderline decisions.", sourceLocation: "Paragraph 3" },
+  { id: 1402, category: "Working with others", criterion: "Contribute to team and working-group meetings as a member.", sourceLocation: "Paragraph 6" },
+  { id: 1403, category: "Working with others", criterion: "Offer informal guidance to colleagues when asked, within own area of experience.", sourceLocation: "Paragraph 7" },
+  { id: 1404, category: "Process improvement", criterion: "Take part in process-improvement activity as directed, including data collection and testing.", sourceLocation: "Paragraph 10" },
+  { id: 1405, category: "Process improvement", criterion: "Support implementation of agreed process changes within own team.", sourceLocation: "Paragraph 11" },
+  { id: 1406, category: "Role boundaries", criterion: "Chairing or leading a working group, formally mentoring colleagues, and independent ownership of a change initiative are not assigned within this role description.", sourceLocation: "Paragraph 14" },
+];
+
+export const civilServiceAssessments = [
+  { requirementId: 1201, assessment: "directly_evidenced", strength: "strong", evidenceIds: [1101, 1102], interpretation: "The CV directly documents cross-team liaison on complex cases.", gap: "No material gap identified in the supplied evidence.", nextStep: null },
+  { requirementId: 1202, assessment: "indirectly_relevantly_evidenced", strength: "moderate", evidenceIds: [1105, 1109], interpretation: "Colleague and manager feedback show Amara is approached informally for advice. This is relevant but doesn't establish advising outside her own direct area or influencing stakeholders.", gap: "Advice or influence beyond her immediate team or area is not documented.", nextStep: "Look for or create an opportunity to advise a different team or stakeholder group, and keep a record of it.", components: [{ component: "Informal advice within own team", assessment: "directly_evidenced", evidenceIds: [1105, 1109], interpretation: "Colleagues within her own team ask for guidance; this is directly documented.", gap: "No material gap for this narrower point." }, { component: "Advice or influence outside own direct area", assessment: "not_found", evidenceIds: [], interpretation: "No source shows advice given to people outside her own team or area.", gap: "Retain a record of any cross-team advice or stakeholder influence." }] },
+  { requirementId: 1203, assessment: "directly_evidenced", strength: "strong", evidenceIds: [1101, 1103], interpretation: "The CV and review directly document independent casework and escalation of complex or borderline decisions.", gap: "No material gap identified.", nextStep: null },
+  { requirementId: 1204, assessment: "indirectly_relevantly_evidenced", strength: "moderate", evidenceIds: [1106], interpretation: "The working-group report shows Amara delivered specific tasks (data collection, testing) to a working group's timeline, but it doesn't show her personally managing a piece of work's overall milestones.", gap: "Ownership of a work plan or its milestones isn't documented.", nextStep: "Take on a bounded piece of work with its own milestones and keep the plan and progress record." },
+  { requirementId: 1205, assessment: "indirectly_relevantly_evidenced", strength: "moderate", evidenceIds: [1104, 1109], interpretation: "The review and colleague note document informal, ad hoc guidance. This is relevant to developing colleagues but doesn't establish structured coaching or mentoring.", gap: "No formal coaching or mentoring relationship, plan, or review is documented.", nextStep: "Take on a formal mentoring assignment and retain the mentoring agreement, session notes, and outcome.", components: [{ component: "Informal guidance", assessment: "directly_evidenced", evidenceIds: [1104, 1109], interpretation: "Ad hoc guidance to colleagues is directly documented.", gap: "This alone does not establish structured coaching or mentoring." }, { component: "Formal coaching or mentoring", assessment: "not_found", evidenceIds: [], interpretation: "No source describes a formal coaching or mentoring assignment.", gap: "Retain a mentoring agreement, session record, and outcome." }] },
+  { requirementId: 1206, assessment: "contradicted", strength: "contradicted", evidenceIds: [1108], interpretation: "The working-group report explicitly names a different person as the group's sponsor and identifies Amara as a member, not as leading the group or the change.", gap: "There is no supplied evidence of Amara leading colleagues through a change.", nextStep: "Build direct evidence of leading a change: seek a defined leadership remit, and retain the plan, communications, and outcome.", components: [{ component: "Contribute to a change process", assessment: "directly_evidenced", evidenceIds: [1106], interpretation: "Data collection and testing contribution is directly documented.", gap: "This does not establish leading colleagues through the change." }, { component: "Lead colleagues through change", assessment: "contradicted", evidenceIds: [1108], interpretation: "The report explicitly identifies membership, not leadership of the working group.", gap: "Retain a defined leadership remit and evidence of engaging colleagues through a change." }] },
+  { requirementId: 1207, assessment: "contradicted", strength: "contradicted", evidenceIds: [1108], interpretation: "The report explicitly identifies Amara as a member, not as chair or lead, of the working group.", gap: "No supplied evidence of chairing or leading a working group.", nextStep: "Seek a chairing or leading opportunity and retain the appointment, agendas, and decisions record." },
+  { requirementId: 1208, assessment: "not_found", strength: "not_demonstrated", evidenceIds: [], interpretation: "No supplied document records a formal mentoring or coaching relationship.", gap: "Formal mentoring/coaching evidence is not found in the current library.", nextStep: "Take on a mentoring assignment and retain the agreement, session notes, and a reflection on progress." },
+];
+
+export const civilServiceContradictions = [
+  { id: 1301, type: "Participation versus leadership", severity: "unsupported", claim: "A claim of chairing or leading the triage working group would not be supported by the report.", explanation: "The report names a different person as the working group's sponsor and identifies Amara as a member, not chair or lead. This shouldn't be represented as proof of leading the group.", evidenceIds: [1108] },
+  { id: 1302, type: "Outcome attribution", severity: "review", claim: "The processing-time reduction should be attributed to the working group's redesigned process, not solely to Amara.", explanation: "The report records an 18-to-11-day change following the process redesign but doesn't establish that one individual caused it.", evidenceIds: [1107, 1108] },
+];
+
+export const civilServiceObjectiveReports = {
+  A: { objective: "A" as const, mappings: civilServiceAssessments },
+  B: {
+    objective: "B" as const,
+    documentedAchievements: [
+      { title: "Independent casework practice", statement: "The CV and review document an independent caseload with escalation of complex or borderline decisions.", evidenceIds: [1101, 1103], qualification: "The supplied sources don't quantify decision volume beyond these documented examples.", action: null },
+      { title: "Colleague support", statement: "Amara has given informal guidance to colleagues within her own team when asked.", evidenceIds: [1104, 1109], qualification: "This is informal and ad hoc, not a structured coaching or mentoring role.", action: null },
+      { title: "Process-improvement contribution", statement: "The working-group report records data collection, meeting attendance, and testing of the redesigned triage process.", evidenceIds: [1106], qualification: "The record identifies working-group membership, not chairing or leading the group.", action: null },
+    ],
+    documentedImpact: [{ title: "Documented working-group-level processing-time change", statement: "The report records an average processing-time reduction from approximately 18 to 11 days following the redesigned triage process.", evidenceIds: [1107], qualification: "This is documented working-group-level impact, not evidence that Amara alone caused or evaluated the change.", action: null }],
+    evidenceLimitations: [{ title: "Working-group leadership and individual causation are not established", statement: "The report names a different person as the working group's sponsor and identifies Amara as a member, not chair or lead.", evidenceIds: [1107, 1108], qualification: "Amara's contribution remains a documented achievement; the limitation concerns leadership and individual causation only.", action: "Use membership/contribution language when describing this work, and retain any future chairing or leading role separately." }],
+    developmentThemes: [{ title: "Formal leadership and mentoring", statement: "The current evidence documents informal guidance and working-group participation, but not a formal mentoring role or a chairing/leading remit.", evidenceIds: [1105, 1108], qualification: "The absence is within the supplied corpus, not a statement about potential.", action: "Seek a defined mentoring assignment or a chance to chair a piece of work." }],
+    evidenceGroundedObjectives: [{ title: "Chair or lead a bounded piece of work", statement: "Build on documented working-group participation by taking a defined future responsibility for chairing or leading a piece of work, including its plan, stakeholder engagement, and outcome.", evidenceIds: [1106, 1108], qualification: "This is a future evidence-building objective, not a claim that leadership is already demonstrated.", action: "Retain the appointment, plan, meeting notes, and outcome record." }],
+    suggestedEvidenceToRetain: [{ title: "Formal mentoring record", statement: "Guidance to colleagues is documented, but no formal mentoring relationship is recorded.", evidenceIds: [1109], qualification: "A thank-you note alone does not show a structured mentoring relationship.", action: "Retain a mentoring agreement, session notes, and a reflection on the colleague's progress." }],
+  },
+  C: {
+    objective: "C" as const,
+    comparisons: [
+      { responsibilityId: 1401, documentedActualActivity: "Independent caseload management with escalation of complex or borderline decisions is documented.", alignment: "aligned" as const, evidenceIds: [1101, 1103], qualification: "The evidence documents activity; it does not determine a job-evaluation outcome.", discussionPoint: "How is the documented independent casework activity reflected in the current role description and local procedures?", strengtheningEvidence: "Retain a current casework log and corroborated examples of independent decisions." },
+      { responsibilityId: 1402, documentedActualActivity: "Working-group meeting attendance and contribution (data collection, testing) is documented.", alignment: "aligned" as const, evidenceIds: [1106], qualification: "The report confirms membership, not chairing or leading the group.", discussionPoint: "How is working-group membership and contribution reflected in the current role?", strengtheningEvidence: "Retain working-group terms of reference, allocated tasks, and corroborated contribution records." },
+      { responsibilityId: 1403, documentedActualActivity: "Informal guidance to colleagues within her own team, given when asked, is documented.", alignment: "aligned" as const, evidenceIds: [1104, 1109], qualification: "A formal mentoring or coaching allocation isn't documented.", discussionPoint: "Is informal, ad hoc guidance to colleagues formally recognised within the current role?", strengtheningEvidence: "Retain any mentoring allocation, role brief, and corroborated feedback." },
+      { responsibilityId: 1404, documentedActualActivity: "Data collection and testing for the triage redesign, as directed, is documented.", alignment: "aligned" as const, evidenceIds: [1106], qualification: "The evidence documents directed participation, not independent ownership of the change.", discussionPoint: "How is directed process-improvement participation reflected in the current role wording?", strengtheningEvidence: "Retain the working-group's terms of reference and Amara's allocated tasks within it." },
+      { responsibilityId: 1405, documentedActualActivity: "The report records testing of the redesigned triage process ahead of rollout.", alignment: "potentially_broader_responsibility" as const, evidenceIds: [1106, 1108], qualification: "The evidence may indicate activity somewhat beyond simple implementation support, but it doesn't establish independent ownership of the change or the working group.", discussionPoint: "Could the documented testing and data contribution be clarified against the current wording of \"support implementation\"?", strengtheningEvidence: "Retain the allocated change remit, decision records, and implementation log." },
+      { responsibilityId: 1406, documentedActualActivity: "The available evidence identifies Amara as a working-group member and does not identify her as chair, lead, or a formal mentor.", alignment: "aligned" as const, evidenceIds: [1108], qualification: "This does not establish independent ownership of a change initiative or a formal mentoring role.", discussionPoint: "Are the current role boundaries and the documented working-group contribution understood consistently by Amara and her manager?", strengtheningEvidence: "Retain any future chairing, leading, or formal mentoring role separately from membership evidence." },
+    ],
+    questionsForDiscussion: [
+      { title: "Clarifying scope of change activity", statement: "Which parts of testing and implementation support are routinely expected in the current role, and which would be additional if Amara took on a leading role?", evidenceIds: [1106, 1108], qualification: "This question does not assume that the activity changes grade.", action: null },
+      { title: "Clarifying guidance and mentoring", statement: "Is the documented guidance a one-off informal contribution or part of a role that could include a formal mentoring assignment?", evidenceIds: [1104, 1109], qualification: "The current evidence does not establish a formal mentoring remit.", action: null },
+    ],
+  },
+};
+
+export type DemoScenarioId = "specialist-advisor" | "civil-service";
+
+export const demoScenarios: { id: DemoScenarioId; personName: string; blurb: string }[] = [
+  { id: "specialist-advisor", personName: "Sarah Mwangi", blurb: "a made-up Grade 6 specialist advisor going for Grade 7, checked against a traditional person specification" },
+  { id: "civil-service", personName: "Amara Okafor", blurb: "a made-up Civil Service EO going for HEO, checked against Success Profile behaviour statements" },
+];
+
+// The document ids these two scenarios' evidence items reference by
+// documentId, in the same order as their documents array -- kept alongside
+// getDemoBundle so a mismatch between the two can't silently drop evidence.
+const specialistAdvisorDocumentKeys = ["demo-cv", "demo-appraisal", "demo-audit", "demo-feedback", "demo-teaching"];
+const civilServiceDocumentKeys = ["demo-cs-cv", "demo-cs-review", "demo-cs-audit", "demo-cs-manager", "demo-cs-peer"];
+
+export function getDemoBundle(scenario: DemoScenarioId = "specialist-advisor") {
+  if (scenario === "civil-service") {
+    return {
+      scenario,
+      personName: "Amara Okafor",
+      profile: civilServiceProfile,
+      documents: civilServiceDocuments,
+      documentKeys: civilServiceDocumentKeys,
+      target: civilServiceTarget,
+      currentRole: civilServiceCurrentRole,
+      evidence: civilServiceEvidence,
+      requirements: civilServiceRequirements,
+      currentRoleResponsibilities: civilServiceCurrentRoleResponsibilities,
+      assessments: civilServiceAssessments,
+      contradictions: civilServiceContradictions,
+      objectiveReports: civilServiceObjectiveReports,
+    };
+  }
+  return {
+    scenario: "specialist-advisor" as const,
+    personName: "Sarah Mwangi",
+    profile: demoProfile,
+    documents: demoDocuments,
+    documentKeys: specialistAdvisorDocumentKeys,
+    target: demoTarget,
+    currentRole: demoCurrentRole,
+    evidence: demoEvidence,
+    requirements: demoRequirements,
+    currentRoleResponsibilities: demoCurrentRoleResponsibilities,
+    assessments: demoAssessments,
+    contradictions: demoContradictions,
+    objectiveReports: demoObjectiveReports,
+  };
+}
+
 export const demoObjectiveReports = {
   A: { objective: "A" as const, mappings: demoAssessments },
   B: {
