@@ -16,19 +16,7 @@
 // interpolate resultData fields into the returned HTML without going
 // through escapeHtml first.
 
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-function truncate(value: string, maxLength: number): string {
-  const trimmed = value.trim();
-  return trimmed.length > maxLength ? `${trimmed.slice(0, maxLength - 1).trimEnd()}…` : trimmed;
-}
+import { escapeHtml, injectBody, replaceHead, truncate } from "./htmlShell";
 
 // Mirrors canonicalAssessment/formatStatus in client/src/components/
 // EvidenceMap.tsx -- kept as its own small copy here rather than shared
@@ -38,19 +26,6 @@ function truncate(value: string, maxLength: number): string {
 function formatAssessmentStatus(value: string): string {
   const canonical = ({ demonstrated: "directly_evidenced", partial: "indirectly_relevantly_evidenced", unsupported: "contradicted" } as Record<string, string>)[value] ?? value;
   return canonical.replace(/_/g, " ");
-}
-
-function replaceHead(html: string, title: string, description: string, canonicalUrl: string): string {
-  let out = html;
-  out = out.replace(/<title>[\s\S]*?<\/title>/, `<title>${title}</title>`);
-  out = out.replace(/<meta name="description" content="[^"]*"\s*\/?>/, `<meta name="description" content="${description}" />`);
-  const ogTags = `<meta property="og:type" content="website" /><meta property="og:title" content="${title}" /><meta property="og:description" content="${description}" /><meta property="og:url" content="${canonicalUrl}" /></head>`;
-  out = out.replace(/<\/head>/, ogTags);
-  return out;
-}
-
-function injectBody(html: string, bodyHtml: string): string {
-  return html.replace(/<body>/, `<body>${bodyHtml}`);
 }
 
 export function renderSharedResultFoundHtml(baseHtml: string, resultData: Record<string, any>, canonicalUrl: string): string {
