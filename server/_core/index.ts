@@ -12,7 +12,10 @@ import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { getDb, getSharedResultBySlug } from "../db";
+import { getCivilServiceBehaviourGuide } from "../../shared/civilServiceBehaviours";
+import { renderBehaviourGuideHtml, renderBehaviourGuideNotFoundHtml, renderBehaviourHubHtml } from "./guideHtml";
 import { renderSharedResultFoundHtml, renderSharedResultNotFoundHtml } from "./sharedResultHtml";
+import { renderSitemapXml } from "./sitemap";
 import { getDistIndexHtmlPath, renderDevIndexHtml, serveStatic, setupVite } from "./vite";
 import { ENV } from "./env";
 import type { ViteDevServer } from "vite";
@@ -147,32 +150,72 @@ async function startServer() {
     })
   );
 
-  // Set once setupVite resolves below, in dev only -- the route handler
-  // closes over this rather than requiring it at registration time, since
-  // Express only calls the handler per-request (by which point setupVite
-  // has already run).
+  // Set once setupVite resolves below, in dev only -- the route handlers
+  // close over this rather than requiring it at registration time, since
+  // Express only calls a handler per-request (by which point setupVite has
+  // already run).
   let viteDevServer: ViteDevServer | undefined;
 
-  // Registered before the dev/prod SPA-fallback branch below so it's
+  // Shared by every crawlable server-rendered route below: the same base
+  // HTML shell dev/prod already serve for every other page (dev: through
+  // Vite's own transform; prod: the built index.html serveStatic's
+  // fallback sends), read fresh per-request so a redeploy or HMR reload is
+  // always reflected.
+  async function getBaseHtml(req: Request): Promise<string> {
+    return process.env.NODE_ENV === "development"
+      ? renderDevIndexHtml(viteDevServer!, req.originalUrl)
+      : fs.promises.readFile(getDistIndexHtmlPath(), "utf-8");
+  }
+
+  function canonicalUrlFor(req: Request): string {
+    return `${req.protocol}://${req.get("host")}${req.originalUrl}`;
+  }
+
+  // Registered before the dev/prod SPA-fallback branch below so they're
   // matched first in both modes. Unlike every other page on this site
   // (100% client-rendered -- the server otherwise sends an empty #root and
-  // everything else only exists once React mounts), this route serves
-  // genuinely server-rendered HTML: a real per-result <title>/meta
+  // everything else only exists once React mounts), these routes serve
+  // genuinely server-rendered HTML: a real per-page <title>/meta
   // description/OG tags and a visible content summary, so a crawler or a
-  // social-card scraper that never runs JS still sees real content for a
-  // shared guest result. See server/_core/sharedResultHtml.ts for why.
+  // social-card scraper that never runs JS still sees real content. See
+  // server/_core/sharedResultHtml.ts and guideHtml.ts for why.
   app.get("/results/:slug", async (req, res, next) => {
     try {
-      const canonicalUrl = `${req.protocol}://${req.get("host")}${req.originalUrl}`;
-      const baseHtml = process.env.NODE_ENV === "development"
-        ? await renderDevIndexHtml(viteDevServer!, req.originalUrl)
-        : await fs.promises.readFile(getDistIndexHtmlPath(), "utf-8");
-      const row = await getSharedResultBySlug(req.params.slug);
+      const [baseHtml, row] = await Promise.all([getBaseHtml(req), getSharedResultBySlug(req.params.slug)]);
+      const canonicalUrl = canonicalUrlFor(req);
       if (!row) {
         res.status(404).set({ "Content-Type": "text/html" }).end(renderSharedResultNotFoundHtml(baseHtml, canonicalUrl));
         return;
       }
       res.status(200).set({ "Content-Type": "text/html" }).end(renderSharedResultFoundHtml(baseHtml, row.resultData, canonicalUrl));
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  app.get("/guides/civil-service-success-profiles", async (req, res, next) => {
+    try {
+      const baseHtml = await getBaseHtml(req);
+      res.status(200).set({ "Content-Type": "text/html" }).end(renderBehaviourHubHtml(baseHtml, canonicalUrlFor(req)));
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  app.get("/sitemap.xml", (req, res) => {
+    res.status(200).set({ "Content-Type": "application/xml" }).end(renderSitemapXml(`${req.protocol}://${req.get("host")}`));
+  });
+
+  app.get("/guides/civil-service-success-profiles/:slug", async (req, res, next) => {
+    try {
+      const baseHtml = await getBaseHtml(req);
+      const canonicalUrl = canonicalUrlFor(req);
+      const guide = getCivilServiceBehaviourGuide(req.params.slug);
+      if (!guide) {
+        res.status(404).set({ "Content-Type": "text/html" }).end(renderBehaviourGuideNotFoundHtml(baseHtml, canonicalUrl));
+        return;
+      }
+      res.status(200).set({ "Content-Type": "text/html" }).end(renderBehaviourGuideHtml(baseHtml, guide, canonicalUrl));
     } catch (e) {
       next(e);
     }
