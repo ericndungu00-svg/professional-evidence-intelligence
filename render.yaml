@@ -1,0 +1,40 @@
+# Render Blueprint for ProveMyCV -- lets Render read this repo and propose
+# the whole web service in one go (New > Blueprint on the Render dashboard),
+# the equivalent of railway.json's role for the Railway deploy this project
+# is moving off. Build/start commands mirror package.json's own scripts
+# exactly, so this never needs to duplicate logic that could drift.
+#
+# Every secret below is deliberately left as `sync: false` -- Render will
+# prompt for a real value in its dashboard the first time you use this
+# blueprint rather than trying to read one from this file (which must never
+# contain a real secret). See the migration guide for exactly where each
+# value comes from.
+services:
+  - type: web
+    name: provemycv
+    runtime: node
+    plan: free
+    buildCommand: pnpm install --frozen-lockfile && pnpm run build
+    startCommand: pnpm run start
+    healthCheckPath: /
+    envVars:
+      - key: SESSION_SECRET
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: OWNER_EMAIL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM_EMAIL
+        sync: false
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET_NAME
+        sync: false
