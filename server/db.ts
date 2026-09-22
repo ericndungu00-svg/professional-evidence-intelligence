@@ -22,7 +22,21 @@ let _db: ReturnType<typeof drizzle> | null = null;
 
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
-    try { _db = drizzle(process.env.DATABASE_URL); } catch (error) { console.warn("[Database] Failed to connect:", error); _db = null; }
+    try {
+      _db = drizzle({
+        connection: {
+          uri: process.env.DATABASE_URL,
+          // Most managed MySQL hosts (Aiven included) require TLS and hand
+          // you a CA certificate to pin; Railway's internal networking
+          // didn't need this, so it only activates when DATABASE_SSL_CA is
+          // actually set rather than assuming every deployment needs it.
+          // Set it to the exact PEM contents the host gives you (the
+          // "-----BEGIN CERTIFICATE-----...-----END CERTIFICATE-----"
+          // block), not a file path -- most hosts don't let you upload one.
+          ...(ENV.databaseSslCa ? { ssl: { ca: ENV.databaseSslCa, rejectUnauthorized: true } } : {}),
+        },
+      });
+    } catch (error) { console.warn("[Database] Failed to connect:", error); _db = null; }
   }
   return _db;
 }

@@ -1,6 +1,9 @@
 export const ENV = {
   sessionSecret: process.env.SESSION_SECRET ?? "",
   databaseUrl: process.env.DATABASE_URL ?? "",
+  // PEM contents of a managed MySQL host's CA certificate (e.g. Aiven),
+  // pinned when present -- see the comment on getDb() in server/db.ts.
+  databaseSslCa: process.env.DATABASE_SSL_CA ?? "",
   ownerEmail: (process.env.OWNER_EMAIL ?? "").trim().toLowerCase(),
   isProduction: process.env.NODE_ENV === "production",
   forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
